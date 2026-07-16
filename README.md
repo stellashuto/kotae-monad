@@ -10,9 +10,10 @@ where finished AI-assisted assets can be sold instantly at fixed AUSD prices.
 
 ## Run locally
 
-Requires Node.js 22 or newer. No package installation is required.
+Requires Node.js 22 or newer.
 
 ```bash
+npm install
 npm run dev
 ```
 
@@ -21,18 +22,30 @@ prototype flow and does not send transactions or persist production data.
 
 ```bash
 npm test
+npm run contract:compile
+npm run contract:test
 npm run build
 ```
 
 ## Onchain
 
 `contracts/src/KotaeEscrow.sol` defines `KotaeEscrow`, the source of truth for funds and contest
-state. It is configured for a six-decimal ERC-20 such as AUSD. Monad Testnet AUSD:
-`0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC` (chain ID `10143`).
+state. It is configured for a six-decimal ERC-20 such as AUSD. The Hardhat configuration targets
+Monad Testnet (chain ID `10143`) and compiles for the Prague EVM target required by Monad.
 
 The contract implements payment locking, zero-submission cancellation, refundable
 submission bonds, two replacements, eligibility-only oracle permissions,
 requester-only winner selection, 85/5/10 settlement, and timeout settlement.
+
+`npm run contract:test` deploys the escrow and a mock six-decimal token to an isolated local
+chain, then executes cancellation, winner settlement, timeout, bond return, and replacement-limit
+checks. Testnet deployment remains unpublished and is intentionally gated on local environment
+values. Confirm the current hackathon-provided AUSD address, then set `PRIVATE_KEY`, `AUSD_ADDRESS`,
+`PLATFORM_RECIPIENT`, and `ELIGIBILITY_ORACLE` outside Git before running:
+
+```bash
+npm run contract:deploy:testnet
+```
 
 ## Production data
 

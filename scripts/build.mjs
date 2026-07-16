@@ -9,8 +9,7 @@ await mkdir(dist, { recursive: true });
 await cp(resolve(root, "public"), dist, { recursive: true });
 await mkdir(resolve(dist, "server"), { recursive: true });
 await build({
-  absWorkingDir: root,
-  entryPoints: ["./worker/index.js"],
+  entryPoints: [resolve(root, "worker", "index.js")],
   outfile: resolve(dist, "server", "index.js"),
   bundle: true,
   format: "esm",

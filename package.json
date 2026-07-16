@@ -10,12 +10,18 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "start": "node scripts/dev.mjs --production",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "contract:compile": "hardhat compile",
+    "contract:test": "hardhat run scripts/test-contract.mjs",
+    "contract:deploy:testnet": "hardhat run scripts/deploy-kotae.mjs --network monadTestnet"
   },
   "dependencies": {
     "viem": "^2.55.2"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1"
+    "@nomicfoundation/hardhat-viem": "^3.0.9",
+    "dotenv": "^17.4.2",
+    "esbuild": "^0.28.1",
+    "hardhat": "^3.9.1"
   }
 }
