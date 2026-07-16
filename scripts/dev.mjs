@@ -7,6 +7,8 @@ const root = resolve(import.meta.dirname, "..");
 const production = process.argv.includes("--production");
 const publicDir = resolve(root, production ? "dist" : ".dev");
 const port = Number(process.env.PORT || 4173);
+const testnetConfig = JSON.parse(await readFile(resolve(root, "config", "monad-testnet.json"), "utf8"));
+let localDeployment = { address: testnetConfig.escrowAddress, txHash: null };
 
 if (!production) {
   await rm(publicDir, { recursive: true, force: true });
@@ -86,7 +88,20 @@ const mime = {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
-  if (url.pathname === "/api/health") return json(res, 200, { ok: true, chainId: 10143, token: "AUSD", walletWrites: "demo-only", chainVerificationConfigured: false, ausdAddress: "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC", ausdFaucetAddress: "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C", escrowAddress: null });
+  if (url.pathname === "/api/health") return json(res, 200, { ok: true, chainId: 10143, token: "AUSD", walletWrites: "demo-only", chainVerificationConfigured: Boolean(localDeployment.address), deploymentReady: true, ausdAddress: testnetConfig.ausdAddress, ausdFaucetAddress: testnetConfig.ausdFaucetAddress, escrowAddress: localDeployment.address, platformRecipient: testnetConfig.platformRecipient, eligibilityOracle: testnetConfig.eligibilityOracle });
+  if (url.pathname === "/api/dev/deploy-artifact" && req.method === "GET") {
+    try {
+      const artifact = JSON.parse(await readFile(resolve(root,"artifacts","contracts","src","KotaeEscrow.sol","KotaeEscrow.json"),"utf8"));
+      return json(res,200,{abi:artifact.abi,bytecode:artifact.bytecode});
+    } catch { return json(res,503,{error:"Compile the escrow before deployment"}); }
+  }
+  if (url.pathname === "/api/dev/deployment" && req.method === "GET") return json(res,200,localDeployment);
+  if (url.pathname === "/api/dev/deployment" && req.method === "POST") {
+    let raw=""; for await (const chunk of req) raw+=chunk;
+    const body=JSON.parse(raw||"{}");
+    if(!/^0x[0-9a-fA-F]{40}$/.test(body.address||"") || !/^0x[0-9a-fA-F]{64}$/.test(body.txHash||"")) return json(res,422,{error:"Invalid deployment receipt"});
+    localDeployment={address:body.address,txHash:body.txHash}; return json(res,201,localDeployment);
+  }
   if (url.pathname === "/api/contests" && req.method === "GET") return json(res, 200, { contests });
   if (url.pathname === "/api/contests" && req.method === "POST") {
     let raw = "";

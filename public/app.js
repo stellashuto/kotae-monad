@@ -1,4 +1,4 @@
-import { encodeFunctionData, isAddress, keccak256, parseAbi, parseUnits, stringToHex } from "viem";
+import { encodeDeployData, encodeFunctionData, isAddress, keccak256, parseAbi, parseUnits, stringToHex } from "viem";
 
 const MONAD_CHAIN_ID = "0x279f";
 const ERC20_ABI = parseAbi(["function approve(address spender, uint256 amount) returns (bool)"]);
@@ -21,7 +21,7 @@ const fallbackContests = [
   { id:"timeout-demo", title:"Editorial poster set · timeout ready", type:"Photo / Visual", brief:"Create an editorial poster series for an independent design festival.", budget:10, deadline:"Ended · 48h elapsed", validCount:3, cap:10, submissions:4, status:"JUDGING_EXPIRED", requester:"0x4E10…37B8", must:["Festival date","Three coordinated posters","Print-ready composition"], avoid:["Stock templates","Unreadable event details"] }
 ];
 
-const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", chain: { configured: false, ausdAddress: null, ausdFaucetAddress: null, escrowAddress: null }, currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
+const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", chain: { configured: false, deploymentReady: false, ausdAddress: null, ausdFaucetAddress: null, escrowAddress: null, platformRecipient: null, eligibilityOracle: null }, currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
 const views = [...document.querySelectorAll("[data-view]")];
 const toast = document.querySelector("#toast");
 
@@ -109,6 +109,25 @@ async function requestTestAUSD() {
   const hash = await sendWalletTransaction(state.chain.ausdFaucetAddress, AUSD_FAUCET_ABI, "requestFunds", [state.wallet]);
   await waitForFinalizedTransaction(hash);
   notify("10,000 Testnet AUSD received.");
+}
+
+async function deployKotaeEscrow() {
+  if (!window.ethereum || !state.wallet) throw new Error("Connect your Monad Testnet wallet first.");
+  if (!state.chain.deploymentReady) throw new Error("The local deployment artifact is not ready.");
+  const response = await fetch("/api/dev/deploy-artifact");
+  const artifact = await response.json().catch(() => ({}));
+  if (!response.ok || !artifact.abi || !artifact.bytecode) throw new Error(artifact.error || "Deployment artifact is unavailable.");
+  const data = encodeDeployData({abi:artifact.abi,bytecode:artifact.bytecode,args:[state.chain.ausdAddress,state.chain.platformRecipient,state.chain.eligibilityOracle]});
+  const txHash = await window.ethereum.request({method:"eth_sendTransaction",params:[{from:state.wallet,data}]});
+  const receipt = await waitForFinalizedTransaction(txHash);
+  if (!isAddress(receipt.contractAddress || "")) throw new Error("Deployment confirmed without a contract address.");
+  const record = await fetch("/api/dev/deployment",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({txHash,address:receipt.contractAddress})});
+  if (!record.ok) throw new Error("Deployment confirmed but could not be recorded locally.");
+  state.chain.escrowAddress = receipt.contractAddress;
+  state.chain.configured = true;
+  updateWalletUI();
+  notify(`KOTAE deployed · ${receipt.contractAddress.slice(0,8)}…`);
+  return receipt.contractAddress;
 }
 
 function contestRow(contest) {
@@ -506,12 +525,17 @@ function updateWalletUI() {
   document.querySelector("#walletButton").textContent = state.wallet ? short : "Connect wallet";
   document.querySelector("#walletAddress").textContent = short;
   document.querySelector("#ausdFaucetButton").hidden = !state.wallet || !state.chain.ausdFaucetAddress;
+  document.querySelector("#deployEscrowButton").hidden = !state.wallet || !state.chain.deploymentReady || Boolean(state.chain.escrowAddress);
 }
 
 document.querySelector("#walletButton").onclick = () => connectWallet().catch(() => notify("Wallet connection was cancelled."));
 document.querySelector("#ausdFaucetButton").onclick = event => {
   const button = event.currentTarget; button.disabled = true; button.textContent = "Requesting AUSD…";
   requestTestAUSD().catch(error => notify(error.message || "AUSD request failed.")).finally(() => { button.disabled = false; button.textContent = "Get Testnet AUSD"; });
+};
+document.querySelector("#deployEscrowButton").onclick = event => {
+  const button = event.currentTarget; button.disabled = true; button.textContent = "Deploying…";
+  deployKotaeEscrow().catch(error => notify(error.message || "Deployment failed.")).finally(() => { button.disabled = false; button.textContent = "Deploy KOTAE"; });
 };
 document.querySelector("#filterTabs").onclick = event => {
   const button = event.target.closest("button"); if (!button) return;
@@ -556,7 +580,7 @@ async function boot() {
     const healthResponse=await fetch("/api/health");
     const health=await healthResponse.json();
     state.authMode=health.walletWrites === "signature" ? "signature" : "demo";
-    state.chain={ configured:Boolean(health.chainVerificationConfigured && health.ausdAddress && health.escrowAddress), ausdAddress:health.ausdAddress || null, ausdFaucetAddress:health.ausdFaucetAddress || null, escrowAddress:health.escrowAddress || null };
+    state.chain={ configured:Boolean(health.chainVerificationConfigured && health.ausdAddress && health.escrowAddress), deploymentReady:Boolean(health.deploymentReady), ausdAddress:health.ausdAddress || null, ausdFaucetAddress:health.ausdFaucetAddress || null, escrowAddress:health.escrowAddress || null, platformRecipient:health.platformRecipient || null, eligibilityOracle:health.eligibilityOracle || null };
     if(state.authMode === "signature") {
       const sessionResponse=await fetch("/api/auth/session");
       if(sessionResponse.ok) state.wallet=(await sessionResponse.json()).address;
