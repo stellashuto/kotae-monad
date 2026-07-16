@@ -1,9 +1,12 @@
 import "dotenv/config";
+import { readFile } from "node:fs/promises";
 import { network } from "hardhat";
 import { getAddress, isAddress, zeroAddress } from "viem";
 
-function requiredAddress(name) {
-  const value = process.env[name]?.trim();
+const config = JSON.parse(await readFile(new URL("../config/monad-testnet.json", import.meta.url), "utf8"));
+
+function requiredAddress(name, fallback) {
+  const value = process.env[name]?.trim() || fallback;
   if (!value || !isAddress(value) || getAddress(value) === zeroAddress) {
     throw new Error(`${name} must be a non-zero EVM address`);
   }
@@ -14,9 +17,9 @@ if (!process.env.PRIVATE_KEY?.trim()) {
   throw new Error("PRIVATE_KEY is required for Testnet deployment");
 }
 
-const ausd = requiredAddress("AUSD_ADDRESS");
-const platform = requiredAddress("PLATFORM_RECIPIENT");
-const oracle = requiredAddress("ELIGIBILITY_ORACLE");
+const ausd = requiredAddress("AUSD_ADDRESS", config.ausdAddress);
+const platform = requiredAddress("PLATFORM_RECIPIENT", config.platformRecipient);
+const oracle = requiredAddress("ELIGIBILITY_ORACLE", config.eligibilityOracle);
 const { viem } = await network.create({ network: "monadTestnet", chainType: "l1" });
 const publicClient = await viem.getPublicClient();
 const [deployer] = await viem.getWalletClients();

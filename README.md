@@ -41,13 +41,16 @@ requester-only winner selection, 85/5/10 settlement, and timeout settlement.
 
 `npm run contract:test` deploys the escrow and a mock six-decimal token to an isolated local
 chain, then executes cancellation, winner settlement, timeout, bond return, and replacement-limit
-checks. Testnet deployment remains unpublished and is intentionally gated on local environment
-values. Confirm the current hackathon-provided AUSD address, then set `PRIVATE_KEY`, `AUSD_ADDRESS`,
-`PLATFORM_RECIPIENT`, and `ELIGIBILITY_ORACLE` outside Git before running:
+checks. Testnet deployment remains unpublished and is intentionally gated on a signing key.
+Configure `PRIVATE_KEY` securely outside Git before running; the public AUSD and role addresses
+have checked-in defaults and can be overridden through environment values when needed:
 
 ```bash
 npm run contract:deploy:testnet
 ```
+
+The non-secret Testnet role defaults are stored in `config/monad-testnet.json`.
+Environment values may override them. Never place a private key in that file.
 
 ## Production data
 

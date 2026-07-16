@@ -1,0 +1,8 @@
+{
+  "chainId": 10143,
+  "rpcUrl": "https://testnet-rpc.monad.xyz",
+  "ausdAddress": "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC",
+  "platformRecipient": "0xE185cFb28854C66A2Fe7972608B3353cebDd8760",
+  "eligibilityOracle": "0xE185cFb28854C66A2Fe7972608B3353cebDd8760",
+  "escrowAddress": null
+}
