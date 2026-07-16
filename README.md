@@ -34,6 +34,8 @@ state. It is configured for a six-decimal ERC-20 such as AUSD. The Hardhat confi
 Monad Testnet (chain ID `10143`) and compiles for the Prague EVM target required by Monad.
 The canonical Monad Testnet AUSD address is
 `0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`.
+Connected Testnet wallets can request demo AUSD from the header's faucet button;
+the configured Agora faucet is `0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`.
 
 The contract implements payment locking, zero-submission cancellation, refundable
 submission bonds, two replacements, eligibility-only oracle permissions,

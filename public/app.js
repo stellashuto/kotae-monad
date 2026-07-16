@@ -2,6 +2,7 @@ import { encodeFunctionData, isAddress, keccak256, parseAbi, parseUnits, stringT
 
 const MONAD_CHAIN_ID = "0x279f";
 const ERC20_ABI = parseAbi(["function approve(address spender, uint256 amount) returns (bool)"]);
+const AUSD_FAUCET_ABI = parseAbi(["function requestFunds(address recipient)"]);
 const ESCROW_ABI = parseAbi([
   "function createContest(uint8 assetType, uint128 baseBudget, uint40 submissionDeadline, uint16 validCap, bytes32 briefHash) returns (uint256 contestId)",
   "function submitWork(uint256 contestId, bytes32 contentHash) returns (uint256 submissionId)",
@@ -20,7 +21,7 @@ const fallbackContests = [
   { id:"timeout-demo", title:"Editorial poster set · timeout ready", type:"Photo / Visual", brief:"Create an editorial poster series for an independent design festival.", budget:10, deadline:"Ended · 48h elapsed", validCount:3, cap:10, submissions:4, status:"JUDGING_EXPIRED", requester:"0x4E10…37B8", must:["Festival date","Three coordinated posters","Print-ready composition"], avoid:["Stock templates","Unreadable event details"] }
 ];
 
-const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", chain: { configured: false, ausdAddress: null, escrowAddress: null }, currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
+const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", chain: { configured: false, ausdAddress: null, ausdFaucetAddress: null, escrowAddress: null }, currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
 const views = [...document.querySelectorAll("[data-view]")];
 const toast = document.querySelector("#toast");
 
@@ -100,6 +101,14 @@ async function callEscrow(functionName, args) {
   const hash = await sendWalletTransaction(state.chain.escrowAddress, ESCROW_ABI, functionName, args);
   await waitForFinalizedTransaction(hash);
   return hash;
+}
+
+async function requestTestAUSD() {
+  if (!window.ethereum || !state.wallet) throw new Error("Connect your Monad Testnet wallet first.");
+  if (!isAddress(state.chain.ausdFaucetAddress || "")) throw new Error("The AUSD Faucet is not configured.");
+  const hash = await sendWalletTransaction(state.chain.ausdFaucetAddress, AUSD_FAUCET_ABI, "requestFunds", [state.wallet]);
+  await waitForFinalizedTransaction(hash);
+  notify("10,000 Testnet AUSD received.");
 }
 
 function contestRow(contest) {
@@ -496,9 +505,14 @@ function updateWalletUI() {
   const short = state.wallet ? `${state.wallet.slice(0,6)}…${state.wallet.slice(-4)}` : "Not connected";
   document.querySelector("#walletButton").textContent = state.wallet ? short : "Connect wallet";
   document.querySelector("#walletAddress").textContent = short;
+  document.querySelector("#ausdFaucetButton").hidden = !state.wallet || !state.chain.ausdFaucetAddress;
 }
 
 document.querySelector("#walletButton").onclick = () => connectWallet().catch(() => notify("Wallet connection was cancelled."));
+document.querySelector("#ausdFaucetButton").onclick = event => {
+  const button = event.currentTarget; button.disabled = true; button.textContent = "Requesting AUSD…";
+  requestTestAUSD().catch(error => notify(error.message || "AUSD request failed.")).finally(() => { button.disabled = false; button.textContent = "Get Testnet AUSD"; });
+};
 document.querySelector("#filterTabs").onclick = event => {
   const button = event.target.closest("button"); if (!button) return;
   state.filter = button.dataset.filter;
@@ -542,7 +556,7 @@ async function boot() {
     const healthResponse=await fetch("/api/health");
     const health=await healthResponse.json();
     state.authMode=health.walletWrites === "signature" ? "signature" : "demo";
-    state.chain={ configured:Boolean(health.chainVerificationConfigured && health.ausdAddress && health.escrowAddress), ausdAddress:health.ausdAddress || null, escrowAddress:health.escrowAddress || null };
+    state.chain={ configured:Boolean(health.chainVerificationConfigured && health.ausdAddress && health.escrowAddress), ausdAddress:health.ausdAddress || null, ausdFaucetAddress:health.ausdFaucetAddress || null, escrowAddress:health.escrowAddress || null };
     if(state.authMode === "signature") {
       const sessionResponse=await fetch("/api/auth/session");
       if(sessionResponse.ok) state.wallet=(await sessionResponse.json()).address;

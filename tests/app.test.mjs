@@ -16,7 +16,9 @@ test("browser client targets Monad testnet and receives deployed addresses from 
   assert.match(app, /0x279f/);
   assert.match(app, /health\.ausdAddress/);
   assert.match(app, /health\.escrowAddress/);
+  assert.match(app, /health\.ausdFaucetAddress/);
   assert.match(app, /fundContestOnchain/);
+  assert.match(app, /requestTestAUSD/);
   assert.match(app, /waitForFinalizedTransaction/);
   for (const method of ["submitWork", "cancelBeforeFirstSubmission", "addSlotPack", "chooseWinner", "settleAfterTimeout"]) assert.match(app, new RegExp(method));
   assert.doesNotMatch(app, /0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC/);

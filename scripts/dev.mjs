@@ -86,7 +86,7 @@ const mime = {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
-  if (url.pathname === "/api/health") return json(res, 200, { ok: true, chainId: 10143, token: "AUSD", walletWrites: "demo-only", chainVerificationConfigured: false, ausdAddress: null, escrowAddress: null });
+  if (url.pathname === "/api/health") return json(res, 200, { ok: true, chainId: 10143, token: "AUSD", walletWrites: "demo-only", chainVerificationConfigured: false, ausdAddress: "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC", ausdFaucetAddress: "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C", escrowAddress: null });
   if (url.pathname === "/api/contests" && req.method === "GET") return json(res, 200, { contests });
   if (url.pathname === "/api/contests" && req.method === "POST") {
     let raw = "";

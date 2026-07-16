@@ -330,6 +330,7 @@ export default { async fetch(request, env) {
     chainVerificationConfigured: Boolean(env.MONAD_RPC_URL && env.KOTAE_ESCROW_ADDRESS),
     escrowAddress: env.KOTAE_ESCROW_ADDRESS || null,
     ausdAddress: env.AUSD_ADDRESS || null,
+    ausdFaucetAddress: env.AUSD_FAUCET_ADDRESS || "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C",
     evaluatorConfigured: typeof env.KOTAE_EVALUATOR_SECRET === "string" && env.KOTAE_EVALUATOR_SECRET.length >= 32,
   });
   if (url.pathname === "/api/auth/challenge" && request.method === "POST") return createWalletChallenge(request,await db(env));
