@@ -18,7 +18,16 @@ test("browser client targets Monad testnet and receives deployed addresses from 
   assert.match(app, /health\.escrowAddress/);
   assert.match(app, /fundContestOnchain/);
   assert.match(app, /waitForFinalizedTransaction/);
+  for (const method of ["submitWork", "cancelBeforeFirstSubmission", "addSlotPack", "chooseWinner", "settleAfterTimeout"]) assert.match(app, new RegExp(method));
   assert.doesNotMatch(app, /0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC/);
+});
+
+test("public contest data exposes chain identifiers without private originals", async () => {
+  const worker = await readFile(new URL("../worker/index.js", import.meta.url), "utf8");
+  assert.match(worker, /chainContestId: row\.chain_contest_id/);
+  assert.match(worker, /chainSubmissionId: row\.chain_submission_id/);
+  assert.match(worker, /request\.method === "GET"\) return listContestSubmissions/);
+  assert.doesNotMatch(worker, /listContestSubmissions[\s\S]{0,1000}file_key/);
 });
 
 test("featured contest continues the strawberry soda hero story", async () => {

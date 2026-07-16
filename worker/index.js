@@ -71,7 +71,36 @@ async function walletForWrite(request, env, database) {
 async function listContests(env) {
   const database = await db(env);
   const rows = await database.prepare(`SELECT c.*, COUNT(CASE WHEN s.eligibility='VALID' THEN 1 END) valid_count, COUNT(s.id) submission_count FROM contests c LEFT JOIN submissions s ON s.contest_id=c.id GROUP BY c.id ORDER BY c.created_at DESC`).all();
-  return json({ contests: rows.results });
+  const contests = rows.results.map((row) => ({
+    id: row.id,
+    chainContestId: row.chain_contest_id,
+    requester: row.requester,
+    title: row.title,
+    type: row.asset_type,
+    brief: row.brief,
+    must: JSON.parse(row.must_json || "[]"),
+    avoid: JSON.parse(row.avoid_json || "[]"),
+    budget: Number(row.budget_micros) / 1_000_000,
+    cap: Number(row.valid_cap),
+    validCount: Number(row.valid_count),
+    submissions: Number(row.submission_count),
+    deadline: row.submission_deadline,
+    status: row.status === "OPEN" && Date.now() > Date.parse(row.submission_deadline) + 48 * 60 * 60 * 1000 ? "JUDGING_EXPIRED" : row.status,
+  }));
+  return json({ contests });
+}
+
+async function listContestSubmissions(env, contestId) {
+  const database = await db(env);
+  const rows = await database.prepare(`SELECT id,creator,version,eligibility,chain_submission_id,submitted_at FROM submissions WHERE contest_id=? ORDER BY submitted_at`).bind(contestId).all();
+  return json({ submissions: rows.results.map((row) => ({
+    id: row.id,
+    creator: row.creator,
+    version: Number(row.version),
+    eligibility: row.eligibility,
+    chainSubmissionId: row.chain_submission_id,
+    submittedAt: row.submitted_at,
+  })) });
 }
 
 async function createContest(request, env) {
@@ -310,6 +339,7 @@ export default { async fetch(request, env) {
   if (url.pathname === "/api/contests" && request.method === "GET") return listContests(env);
   if (url.pathname === "/api/contests" && request.method === "POST") return createContest(request,env);
   let match = url.pathname.match(/^\/api\/contests\/([^/]+)\/submissions$/);
+  if (match && request.method === "GET") return listContestSubmissions(env,match[1]);
   if (match && request.method === "POST") return submitWork(request,env,match[1]);
   match = url.pathname.match(/^\/api\/submissions\/([^/]+)\/eligibility$/);
   if (match && request.method === "PATCH") return eligibility(request,env,match[1]);

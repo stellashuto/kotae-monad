@@ -32,6 +32,8 @@ npm run build
 `contracts/src/KotaeEscrow.sol` defines `KotaeEscrow`, the source of truth for funds and contest
 state. It is configured for a six-decimal ERC-20 such as AUSD. The Hardhat configuration targets
 Monad Testnet (chain ID `10143`) and compiles for the Prague EVM target required by Monad.
+The canonical Monad Testnet AUSD address is
+`0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`.
 
 The contract implements payment locking, zero-submission cancellation, refundable
 submission bonds, two replacements, eligibility-only oracle permissions,

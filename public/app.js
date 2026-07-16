@@ -4,6 +4,11 @@ const MONAD_CHAIN_ID = "0x279f";
 const ERC20_ABI = parseAbi(["function approve(address spender, uint256 amount) returns (bool)"]);
 const ESCROW_ABI = parseAbi([
   "function createContest(uint8 assetType, uint128 baseBudget, uint40 submissionDeadline, uint16 validCap, bytes32 briefHash) returns (uint256 contestId)",
+  "function submitWork(uint256 contestId, bytes32 contentHash) returns (uint256 submissionId)",
+  "function cancelBeforeFirstSubmission(uint256 contestId)",
+  "function addSlotPack(uint256 contestId)",
+  "function chooseWinner(uint256 contestId, uint256 winnerSubmissionId)",
+  "function settleAfterTimeout(uint256 contestId)",
 ]);
 const ASSET_TYPE = { "Photo / Visual": 0, "Static Page": 1, "Micro Tool": 2, "Short Video": 3 };
 
@@ -77,6 +82,26 @@ async function fundContestOnchain(payload) {
   return contestHash;
 }
 
+function chainContestId(contest) {
+  const value = contest.chainContestId ?? contest.chain_contest_id;
+  if (!value) throw new Error("This contest is not linked to the deployed KOTAE escrow.");
+  return BigInt(value);
+}
+
+async function approveAUSD(amount) {
+  requireOnchainConfiguration();
+  const hash = await sendWalletTransaction(state.chain.ausdAddress, ERC20_ABI, "approve", [state.chain.escrowAddress, amount]);
+  await waitForFinalizedTransaction(hash);
+  return hash;
+}
+
+async function callEscrow(functionName, args) {
+  requireOnchainConfiguration();
+  const hash = await sendWalletTransaction(state.chain.escrowAddress, ESCROW_ABI, functionName, args);
+  await waitForFinalizedTransaction(hash);
+  return hash;
+}
+
 function contestRow(contest) {
   const timeoutReady = contest.status === "JUDGING_EXPIRED";
   return `<article class="contest-row" data-contest-id="${escapeHtml(contest.id)}" tabindex="0" role="button" aria-label="Open ${escapeHtml(contest.title)}">
@@ -121,20 +146,31 @@ document.querySelectorAll("[data-route]").forEach(link => link.addEventListener(
 
 document.querySelector("#demoContestButton").addEventListener("click", () => openContest("strawberry-soda"));
 
-function entryCard(number, status = "VALID", theme = "", canSelect = true) {
+function entryCard(number, status = "VALID", theme = "", canSelect = true, record = {}) {
   const strawberryEntries = ["Fresh Splash", "Bold Launch", "Studio Pop", "Illustrated Fizz"];
   const title = theme === "strawberry" ? strawberryEntries[number - 1] : `Creator outcome ${number}`;
   const previewClass = theme === "strawberry" ? ` strawberry-preview strawberry-preview-${number}` : "";
-  return `<article class="entry-card"><div class="entry-preview${previewClass}" role="img" aria-label="${escapeHtml(title)} watermarked submission preview"></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(title)}</strong><span>System watermark applied · Original stays private</span></p><button class="select-winner" data-entry="${number}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${canSelect ? "Select this outcome" : "Judging window expired"}</button></article>`;
+  return `<article class="entry-card"><div class="entry-preview${previewClass}" role="img" aria-label="${escapeHtml(title)} watermarked submission preview"></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(title)}</strong><span>System watermark applied · Original stays private</span></p><button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${canSelect ? "Select this outcome" : "Judging window expired"}</button></article>`;
 }
 
-function openContest(id) {
+async function openContest(id) {
   const contest = state.contests.find(item => item.id === id) || fallbackContests.find(item => item.id === id) || state.contests[0] || fallbackContests[0];
   state.currentContest = contest;
+  if (state.authMode === "signature" && contest.chainContestId && !contest.entries) {
+    try {
+      const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/submissions`);
+      if (response.ok) contest.entries = (await response.json()).submissions;
+    } catch {
+      contest.entries = [];
+    }
+  }
   const percent = Math.min(100, Math.round((contest.validCount / contest.cap) * 100));
   const isOpen = contest.status === "OPEN";
   const timeoutReady = contest.status === "JUDGING_EXPIRED";
-  const entries = Array.from({length: Math.min(contest.validCount, 4)}, (_,i) => entryCard(i+1, "VALID", contest.demoTheme, isOpen)).join("") || `<p>No valid entries were approved.</p>`;
+  const entryRecords = Array.isArray(contest.entries)
+    ? contest.entries.filter(entry => entry.eligibility === "VALID")
+    : Array.from({length: Math.min(contest.validCount, 4)}, () => ({eligibility:"VALID"}));
+  const entries = entryRecords.map((entry,i) => entryCard(i+1, entry.eligibility, contest.demoTheme, isOpen && (state.authMode === "demo" || Boolean(entry.id && entry.chainSubmissionId)), entry)).join("") || `<p>No valid entries were approved.</p>`;
   const cancelAction = contest.status === "OPEN" && contest.submissions === 0 ? `<button class="cancel-contest" id="cancelContest">Cancel & refund before first submission</button>` : "";
   const creatorVersion = state.creatorVersions[contest.id] || 0;
   const submitLabel = creatorVersion === 0 ? "Submit finished work ↗" : creatorVersion < 3 ? `Replace your submission · ${3 - creatorVersion} left` : "Replacement limit reached";
@@ -154,7 +190,7 @@ function openContest(id) {
   document.querySelector("#settleTimeout")?.addEventListener("click", () => requestTimeoutSettlement(contest));
   document.querySelector("#addSlotPack")?.addEventListener("click", () => requestSlotPack(contest));
   document.querySelector("#cancelContest")?.addEventListener("click", () => requestContestCancellation(contest));
-  document.querySelectorAll(".select-winner").forEach(button => button.onclick = () => settleContest(contest, button.dataset.entry));
+  document.querySelectorAll(".select-winner").forEach(button => button.onclick = () => settleContest(contest, button.dataset.entry, button.dataset.submission, button.dataset.chainSubmission));
   navigate("contest");
 }
 
@@ -240,6 +276,11 @@ function showSubmitDialog() {
     let recordedVersion = nextVersion;
     try {
       const form = new FormData(); form.append("file", file);
+      if (state.authMode === "signature") {
+        if (!replacing) await approveAUSD(parseUnits(String(bonds[contest.type]), 6));
+        const txHash = await callEscrow("submitWork", [chainContestId(contest), `0x${hash}`]);
+        form.append("txHash", txHash);
+      }
       const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/submissions`, { method:"POST", headers:{"x-wallet-address":state.wallet || "demo:creator"}, body:form });
       if (response.ok) recordedVersion = Number((await response.json()).version || nextVersion);
       else if (response.status !== 404) {
@@ -247,8 +288,12 @@ function showSubmitDialog() {
         button.disabled = false; button.innerHTML = `${actionLabel} <span>↗</span>`;
         return notify(result.error || "Submission could not be recorded.");
       }
-    } catch {
-      // Static hackathon demo: preserve the same interaction without a bound Worker.
+    } catch (error) {
+      if (state.authMode === "signature") {
+        button.disabled = false; button.innerHTML = `${actionLabel} <span>↗</span>`;
+        return notify(error.message || "Submission transaction could not be completed.");
+      }
+      // Local demo mode mirrors the interaction without sending funds.
     }
     button.textContent = "AI checking file integrity and brief fit…";
     await new Promise(resolve => setTimeout(resolve, 1200));
@@ -268,14 +313,19 @@ function requestContestCancellation(contest) {
     const button = modal.querySelector("#confirmCancellation");
     button.disabled = true; button.textContent = "Checking submission count…";
     try {
-      const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/cancel`, { method:"POST", headers:{"x-wallet-address":state.wallet || contest.requester} });
+      const txHash = state.authMode === "signature" ? await callEscrow("cancelBeforeFirstSubmission", [chainContestId(contest)]) : undefined;
+      const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/cancel`, { method:"POST", headers:{"content-type":"application/json","x-wallet-address":state.wallet || contest.requester}, body:JSON.stringify({txHash}) });
       if (!response.ok && response.status !== 404) {
         const result = await response.json().catch(() => ({}));
         button.disabled = false; button.textContent = "Cancel contest & refund AUSD";
         return notify(result.error || "Cancellation is no longer available.");
       }
-    } catch {
-      // Static hackathon demo: the contract remains the source of truth in production.
+    } catch (error) {
+      if (state.authMode === "signature") {
+        button.disabled = false; button.textContent = "Cancel contest & refund AUSD";
+        return notify(error.message || "Cancellation transaction could not be completed.");
+      }
+      // Local demo mode mirrors the contract result without sending funds.
     }
     contest.status = "CANCELLED";
     state.contests = state.contests.filter(item => item.id !== contest.id);
@@ -300,7 +350,12 @@ function requestSlotPack(contest) {
     let confirmedCap = nextCap;
     let confirmedFee = fee;
     try {
-      const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/slots`, { method:"POST", headers:{"x-wallet-address":state.wallet || contest.requester} });
+      let txHash;
+      if (state.authMode === "signature") {
+        await approveAUSD(BigInt(Math.round(fee * 1_000_000)));
+        txHash = await callEscrow("addSlotPack", [chainContestId(contest)]);
+      }
+      const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/slots`, { method:"POST", headers:{"content-type":"application/json","x-wallet-address":state.wallet || contest.requester}, body:JSON.stringify({txHash}) });
       if (response.ok) {
         const result = await response.json(); confirmedCap = Number(result.validCap || nextCap); confirmedFee = Number(result.feeMicros || fee * 1_000_000) / 1_000_000;
       } else if (response.status !== 404) {
@@ -308,8 +363,12 @@ function requestSlotPack(contest) {
         button.disabled = false; button.innerHTML = 'Pay fee & add five slots <span>↗</span>';
         return notify(result.error || "More slots cannot be added.");
       }
-    } catch {
-      // Static hackathon demo: mirror the contract result locally.
+    } catch (error) {
+      if (state.authMode === "signature") {
+        button.disabled = false; button.innerHTML = 'Pay fee & add five slots <span>↗</span>';
+        return notify(error.message || "Slot transaction could not be completed.");
+      }
+      // Local demo mode mirrors the contract result without sending funds.
     }
     contest.cap = confirmedCap;
     contest.slotPacks = (contest.slotPacks || 0) + 1;
@@ -333,14 +392,19 @@ function requestTimeoutSettlement(contest) {
     const button = modal.querySelector("#confirmTimeout");
     button.disabled = true; button.textContent = "Confirming neutral settlement…";
     try {
-      const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/timeout-settle`, { method:"POST", headers:{"content-type":"application/json","x-wallet-address":state.wallet || "demo:settler"}, body:JSON.stringify({ txHash:"demo:timeout" }) });
+      const txHash = state.authMode === "signature" ? await callEscrow("settleAfterTimeout", [chainContestId(contest)]) : "demo:timeout";
+      const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/timeout-settle`, { method:"POST", headers:{"content-type":"application/json","x-wallet-address":state.wallet || "demo:settler"}, body:JSON.stringify({txHash}) });
       if (!response.ok && response.status !== 404) {
         const result = await response.json().catch(() => ({}));
         button.disabled = false; button.innerHTML = 'Settle timeout on Monad <span>↗</span>';
         return notify(result.error || "Timeout settlement is not available yet.");
       }
-    } catch {
-      // Static hackathon demo: mirror the contract allocation locally.
+    } catch (error) {
+      if (state.authMode === "signature") {
+        button.disabled = false; button.innerHTML = 'Settle timeout on Monad <span>↗</span>';
+        return notify(error.message || "Timeout transaction could not be completed.");
+      }
+      // Local demo mode mirrors the contract allocation without sending funds.
     }
     await new Promise(resolve => setTimeout(resolve, 800));
     contest.status = validCount > 0 ? "TIMEOUT_SETTLED" : "REFUNDED_NO_VALID";
@@ -357,7 +421,7 @@ function showTimeoutReceipt(contest, validCount, eachCreator, requesterRefund, p
   receipt.querySelector("#timeoutDashboard").onclick = () => { receipt.remove(); renderContests(); navigate("dashboard"); notify(`Timeout settled · ${totalSettled.toFixed(2)} AUSD released.`); };
 }
 
-function settleContest(contest, entry) {
+function settleContest(contest, entry, submissionId, chainSubmissionId) {
   const slotFees = contest.slotFees || 0;
   const slotParticipation = slotFees / 2;
   const winner = contest.budget * .85;
@@ -368,8 +432,21 @@ function settleContest(contest, entry) {
   const modal = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">SETTLEMENT PREVIEW</div><h2>Select Entry ${String(entry).padStart(2,"0")}?</h2><p>This decision transfers the selected original and its commercial rights. It cannot be reversed after the transaction confirms.</p><div class="settlement-table"><div><span>Winner receives</span><strong>${winnerTotal.toFixed(2)} AUSD</strong></div><div><span>Valid runners-up share</span><strong>${participation.toFixed(2)} AUSD</strong></div><div><span>KOTAE protocol</span><strong>${platform.toFixed(2)} AUSD</strong></div></div><button class="primary-button wide" id="confirmWinner">Confirm winner on Monad <span>↗</span></button>`);
   modal.querySelector("#confirmWinner").onclick = async () => {
     const button = modal.querySelector("#confirmWinner"); button.disabled=true; button.textContent="Confirming settlement…";
-    await new Promise(resolve=>setTimeout(resolve,900));
-    contest.status="SETTLED"; contest.winnerEntry=Number(entry); modal.remove(); showSettlementReceipt(contest, entry, winnerTotal, participation, platform, totalSettled);
+    try {
+      if (state.authMode === "signature") {
+        if (!submissionId || !chainSubmissionId) throw new Error("The selected submission is not linked to an onchain entry.");
+        const txHash = await callEscrow("chooseWinner", [chainContestId(contest), BigInt(chainSubmissionId)]);
+        const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/settle`, {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({submissionId,txHash})});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Winner settlement could not be recorded.");
+      } else {
+        await new Promise(resolve=>setTimeout(resolve,900));
+      }
+      contest.status="SETTLED"; contest.winnerEntry=Number(entry); modal.remove(); showSettlementReceipt(contest, entry, winnerTotal, participation, platform, totalSettled);
+    } catch (error) {
+      button.disabled=false; button.innerHTML='Confirm winner on Monad <span>↗</span>';
+      notify(error.message || "Winner settlement could not be completed.");
+    }
   };
 }
 
