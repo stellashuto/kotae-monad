@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#11130f" />
+    <meta name="description" content="KOTAE is a competition marketplace for finished AI work, settled in AUSD on Monad." />
+    <meta property="og:title" content="KOTAE — Buy the answer. Not the attempts." />
+    <meta property="og:description" content="Fund a brief. Creators submit finished work. You choose the outcome." />
+    <meta property="og:image" content="/og.png" />
+    <title>KOTAE — Buy the answer. Not the attempts.</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+    <header class="site-header">
+      <a class="wordmark" href="#home" data-route="home" aria-label="KOTAE home">
+        <span class="mark">K</span><span>KOTAE</span>
+      </a>
+      <nav class="desktop-nav" aria-label="Primary navigation">
+        <a href="#browse" data-route="browse">Explore</a>
+        <a href="#how">How it works</a>
+        <a href="#dashboard" data-route="dashboard">Dashboard</a>
+      </nav>
+      <div class="header-actions">
+        <span class="network-pill"><i></i> Monad Testnet</span>
+        <button class="wallet-button" id="walletButton">Connect wallet</button>
+      </div>
+    </header>
+
+    <main id="app" tabindex="-1">
+      <section class="view active" data-view="home">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow"><span>01</span> A competition marketplace for AI outcomes</div>
+            <h1>Buy the answer.<br /><em>Not the attempts.</em></h1>
+            <p class="hero-lede">Fund the brief once. Skilled creators compete with finished work. AI checks the rules—you choose the winner.</p>
+            <div class="hero-actions">
+              <button class="primary-button" id="demoContestButton">Try the live demo <span>↗</span></button>
+              <button class="text-button" data-route="create">Start a contest <span>→</span></button>
+            </div>
+            <div class="trust-row">
+              <span>Secured by <b>Monad</b></span>
+              <span>Settled in <b>AUSD</b></span>
+              <span>Choice stays <b>human</b></span>
+            </div>
+          </div>
+
+          <figure class="hero-stage">
+            <img
+              src="/og.png"
+              alt="A funded strawberry soda poster brief receives four competing creative submissions; the requester selects one and receives the finished work."
+              width="1728"
+              height="903"
+              loading="eager"
+              fetchpriority="high"
+              decoding="async"
+            />
+          </figure>
+        </div>
+
+        <div class="ticker" aria-label="Product benefits">
+          <div>FINISHED WORK <span>✦</span> FIXED BUDGET <span>✦</span> SYSTEM WATERMARKS <span>✦</span> REFUNDABLE CREATOR BONDS <span>✦</span> REQUESTER CHOOSES <span>✦</span></div>
+        </div>
+
+        <section class="how-section" id="how">
+          <div class="section-kicker">THE KOTAE LOOP</div>
+          <div class="section-heading">
+            <h2>One payment.<br />Many possible answers.</h2>
+            <p>KOTAE separates quality control from taste. The system rejects spam and broken files. The person who wrote the brief makes the creative decision.</p>
+          </div>
+          <div class="steps-grid">
+            <article><span>01</span><h3>Fund the brief</h3><p>Your AUSD is locked before the contest opens. Creators know the prize is real.</p></article>
+            <article><span>02</span><h3>Receive outcomes</h3><p>Creators post a refundable bond only when they submit. The system applies previews and checks eligibility.</p></article>
+            <article><span>03</span><h3>Choose the result</h3><p>Pick the work you want. The contract settles 85% to the winner, 5% to valid runners-up, and 10% to KOTAE.</p></article>
+          </div>
+        </section>
+
+        <section class="open-section">
+          <div class="section-kicker">LIVE OPPORTUNITIES</div>
+          <div class="section-heading compact"><h2>Briefs worth making.</h2><button class="text-button" data-route="browse">View all <span>→</span></button></div>
+          <div class="contest-list" id="homeContestList"></div>
+        </section>
+
+        <section class="roadmap-section" id="roadmap">
+          <div class="section-kicker">POST-HACKATHON ROADMAP</div>
+          <div class="roadmap-grid">
+            <div>
+              <span class="future-badge">FUTURE MARKETPLACE</span>
+              <h2>Creators sell what<br />they already made.</h2>
+            </div>
+            <div class="roadmap-copy">
+              <p>The hackathon MVP starts with funded competitions for custom work. Next, KOTAE expands into creator storefronts where buyers can purchase finished AI-assisted assets immediately at a fixed AUSD price.</p>
+              <div class="roadmap-cards">
+                <article><span>01</span><h3>List finished work</h3><p>Images, photos, videos, pages, and micro tools—with clear previews and license terms.</p></article>
+                <article><span>02</span><h3>Buy instantly</h3><p>Pay the listed AUSD price and unlock the original without opening a competition.</p></article>
+                <article><span>03</span><h3>Give work a second life</h3><p>Creators may relist eligible non-winning work when the original brief is not confidential.</p></article>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" data-view="browse">
+        <div class="page-intro">
+          <div><div class="eyebrow"><span>02</span> Open competitions</div><h1>Make something<br /><em>worth choosing.</em></h1></div>
+          <p>Every brief is funded before it goes live. Submit finished work—not a prompt, not a model, not a promise.</p>
+        </div>
+        <div class="filter-bar">
+          <div class="filter-tabs" id="filterTabs">
+            <button class="active" data-filter="All">All</button><button data-filter="Photo / Visual">Visual</button><button data-filter="Short Video">Short video</button><button data-filter="Static Page">Static page</button><button data-filter="Micro Tool">Micro tool</button>
+          </div>
+          <label>Sort <select id="sortSelect"><option value="ending">Ending soon</option><option value="budget">Highest budget</option></select></label>
+        </div>
+        <div class="contest-list expanded" id="browseContestList"></div>
+      </section>
+
+      <section class="view" data-view="create">
+        <div class="form-shell">
+          <aside class="form-aside">
+            <div class="eyebrow"><span>03</span> Create a competition</div>
+            <h1>Describe the<br /><em>result.</em></h1>
+            <p>Clear constraints attract strong work. Your base budget is locked in AUSD when the contest opens.</p>
+            <ol class="progress-list"><li class="active">Brief</li><li>Rules</li><li>Funding</li></ol>
+          </aside>
+          <form class="contest-form" id="contestForm">
+            <div class="form-section"><span class="form-number">01</span><div><h2>What should creators make?</h2><p>Choose the smallest deliverable that solves your problem.</p></div></div>
+            <div class="type-selector" id="typeSelector">
+              <button type="button" class="active" data-type="Photo / Visual" data-min="2" data-cap="10"><b>◐</b><span>Photo / Visual<small>Images, photos, key art</small></span></button>
+              <button type="button" data-type="Short Video" data-min="8" data-cap="5"><b>▶</b><span>Short Video<small>MP4/WebM · up to 30 sec</small></span></button>
+              <button type="button" data-type="Static Page" data-min="10" data-cap="5"><b>▤</b><span>Static Page<small>Responsive ZIP + screenshots</small></span></button>
+              <button type="button" data-type="Micro Tool" data-min="20" data-cap="5"><b>⌘</b><span>Micro Tool<small>Focused browser utility</small></span></button>
+            </div>
+            <label class="field"><span>Contest title</span><input required name="title" maxlength="80" placeholder="e.g. Launch visual for an onchain savings app" /><small><i>0</i>/80</small></label>
+            <label class="field"><span>Creative brief</span><textarea required name="brief" maxlength="800" rows="6" placeholder="What does success look like? Who is it for? Where will it be used?"></textarea><small><i>0</i>/800</small></label>
+            <div class="split-fields">
+              <label class="field"><span>Base prize (AUSD)</span><input required name="budget" type="number" min="2" value="12" step="1" /><small id="minBudget">Minimum 2 AUSD</small></label>
+              <label class="field"><span>Submission window</span><select name="deadline"><option>3d 00h</option><option selected>7d 00h</option><option>14d 00h</option></select></label>
+            </div>
+            <label class="field"><span>Must include <em>one per line, up to 5</em></span><textarea name="must" rows="4" placeholder="Purple kinetic energy&#10;Readable at mobile size&#10;No token-price claims"></textarea></label>
+            <label class="field"><span>Avoid <em>one per line, up to 5</em></span><textarea name="avoid" rows="3" placeholder="Generic robot imagery&#10;Exchange dashboard UI"></textarea></label>
+            <div class="funding-summary">
+              <div><span>Winner</span><strong>85%</strong></div><div><span>Valid runners-up</span><strong>5%</strong></div><div><span>KOTAE</span><strong>10%</strong></div>
+              <p>Commercial rights transfer only for the selected work. Losing creators retain their work.</p>
+            </div>
+            <label class="check-row"><input required type="checkbox" /><span>I understand that funding is locked after the first onchain submission. I can cancel for a full refund only before any submission exists.</span></label>
+            <button class="primary-button wide" type="submit">Fund & open contest <span>↗</span></button>
+          </form>
+        </div>
+      </section>
+
+      <section class="view" data-view="contest">
+        <div id="contestDetail"></div>
+      </section>
+
+      <section class="view" data-view="dashboard">
+        <div class="page-intro dashboard-intro">
+          <div><div class="eyebrow"><span>04</span> Your activity</div><h1>Work in<br /><em>motion.</em></h1></div>
+          <div class="wallet-card"><span>CONNECTED WALLET</span><strong id="walletAddress">Not connected</strong><small>Monad Testnet · 10143</small></div>
+        </div>
+        <div class="metrics-row"><div><span>Funds locked</span><strong>40.00</strong><small>AUSD</small></div><div><span>Open contests</span><strong>2</strong><small>REQUESTER</small></div><div><span>Valid entries</span><strong>7</strong><small>CREATOR</small></div><div><span>Claimable</span><strong>4.20</strong><small>AUSD</small></div></div>
+        <div class="dashboard-grid">
+          <section><div class="section-kicker">REQUESTING</div><h2>Your competitions</h2><div class="contest-list" id="dashboardContestList"></div></section>
+          <aside class="activity-panel"><div class="section-kicker">ONCHAIN ACTIVITY</div><h2>Recent events</h2><ul><li><i class="valid-dot"></i><div><b>Entry marked valid</b><span>Monad summer launch visual</span></div><time>12m</time></li><li><i></i><div><b>Bond deposited</b><span>1.00 AUSD · Static Page</span></div><time>2h</time></li><li><i></i><div><b>Contest funded</b><span>28.00 AUSD locked</span></div><time>1d</time></li></ul></aside>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wordmark"><span class="mark">K</span><span>KOTAE</span></div>
+      <p>Buy the answer.<br />Not the attempts.</p>
+      <div><a href="#browse" data-route="browse">Explore</a><a href="https://testnet.monadexplorer.com" target="_blank" rel="noreferrer">Monad Explorer ↗</a><span>Built for Spark 2026</span></div>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
