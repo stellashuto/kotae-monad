@@ -9,6 +9,15 @@ await mkdir(dist, { recursive: true });
 await cp(resolve(root, "public"), dist, { recursive: true });
 await mkdir(resolve(dist, "server"), { recursive: true });
 await build({
+  entryPoints: [resolve(root, "public", "app.js")],
+  outfile: resolve(dist, "app.js"),
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  logLevel: "warning",
+});
+await build({
   entryPoints: [resolve(root, "worker", "index.js")],
   outfile: resolve(dist, "server", "index.js"),
   bundle: true,

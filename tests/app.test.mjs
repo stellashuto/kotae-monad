@@ -11,10 +11,14 @@ test("product copy and critical transaction affordances render", async () => {
   assert.match(html, /fixed AUSD price/);
 });
 
-test("browser client targets official Monad testnet and AUSD", async () => {
+test("browser client targets Monad testnet and receives deployed addresses from runtime config", async () => {
   const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
-  assert.match(app, /0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC/);
   assert.match(app, /0x279f/);
+  assert.match(app, /health\.ausdAddress/);
+  assert.match(app, /health\.escrowAddress/);
+  assert.match(app, /fundContestOnchain/);
+  assert.match(app, /waitForFinalizedTransaction/);
+  assert.doesNotMatch(app, /0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC/);
 });
 
 test("featured contest continues the strawberry soda hero story", async () => {

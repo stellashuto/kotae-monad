@@ -1,5 +1,11 @@
-const AUSD_TESTNET = "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC";
+import { encodeFunctionData, isAddress, keccak256, parseAbi, parseUnits, stringToHex } from "viem";
+
 const MONAD_CHAIN_ID = "0x279f";
+const ERC20_ABI = parseAbi(["function approve(address spender, uint256 amount) returns (bool)"]);
+const ESCROW_ABI = parseAbi([
+  "function createContest(uint8 assetType, uint128 baseBudget, uint40 submissionDeadline, uint16 validCap, bytes32 briefHash) returns (uint256 contestId)",
+]);
+const ASSET_TYPE = { "Photo / Visual": 0, "Static Page": 1, "Micro Tool": 2, "Short Video": 3 };
 
 const fallbackContests = [
   { id:"strawberry-soda", title:"New strawberry soda launch poster", type:"Photo / Visual", brief:"Design a square social media poster for a new strawberry soda. Make the drink instantly recognizable, fresh, playful, and premium.", budget:12, deadline:"2d 14h", validCount:4, cap:10, submissions:4, status:"OPEN", requester:"0x7A2c…91F0", demoTheme:"strawberry", must:["Pink strawberry soda bottle or glass","Fresh strawberries and visible bubbles","Readable at mobile size","Square social media composition"], avoid:["Unrelated flavors","Generic stock layout","Health or nutrition claims"] },
@@ -9,7 +15,7 @@ const fallbackContests = [
   { id:"timeout-demo", title:"Editorial poster set · timeout ready", type:"Photo / Visual", brief:"Create an editorial poster series for an independent design festival.", budget:10, deadline:"Ended · 48h elapsed", validCount:3, cap:10, submissions:4, status:"JUDGING_EXPIRED", requester:"0x4E10…37B8", must:["Festival date","Three coordinated posters","Print-ready composition"], avoid:["Stock templates","Unreadable event details"] }
 ];
 
-const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
+const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", chain: { configured: false, ausdAddress: null, escrowAddress: null }, currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
 const views = [...document.querySelectorAll("[data-view]")];
 const toast = document.querySelector("#toast");
 
@@ -22,6 +28,53 @@ function notify(message) {
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[char]);
+}
+
+function requireOnchainConfiguration() {
+  if (!window.ethereum) throw new Error("Install an EVM wallet to fund a contest on Monad Testnet.");
+  if (!state.wallet) throw new Error("Connect and verify your wallet first.");
+  if (!state.chain.configured || !isAddress(state.chain.ausdAddress || "") || !isAddress(state.chain.escrowAddress || "")) {
+    throw new Error("KOTAE escrow and AUSD addresses are not configured yet.");
+  }
+}
+
+async function sendWalletTransaction(to, abi, functionName, args) {
+  const data = encodeFunctionData({ abi, functionName, args });
+  return window.ethereum.request({ method: "eth_sendTransaction", params: [{ from: state.wallet, to, data }] });
+}
+
+async function waitForFinalizedTransaction(txHash) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const [receipt, finalized] = await Promise.all([
+      window.ethereum.request({ method: "eth_getTransactionReceipt", params: [txHash] }),
+      window.ethereum.request({ method: "eth_getBlockByNumber", params: ["finalized", false] }),
+    ]);
+    if (receipt?.status === "0x0") throw new Error("The Monad transaction reverted.");
+    if (receipt?.blockNumber && finalized?.number && BigInt(receipt.blockNumber) <= BigInt(finalized.number)) return receipt;
+    await new Promise(resolve => setTimeout(resolve, 750));
+  }
+  throw new Error("The transaction was sent but is still awaiting Monad finality. Try again shortly.");
+}
+
+function briefHash(payload) {
+  return keccak256(stringToHex(JSON.stringify({
+    title: String(payload.title || "").trim(),
+    brief: String(payload.brief || "").trim(),
+    must: Array.isArray(payload.must) ? payload.must.map(String) : [],
+    avoid: Array.isArray(payload.avoid) ? payload.avoid.map(String) : [],
+  })));
+}
+
+async function fundContestOnchain(payload) {
+  requireOnchainConfiguration();
+  const amount = parseUnits(String(payload.budget), 6);
+  const approveHash = await sendWalletTransaction(state.chain.ausdAddress, ERC20_ABI, "approve", [state.chain.escrowAddress, amount]);
+  await waitForFinalizedTransaction(approveHash);
+  const contestHash = await sendWalletTransaction(state.chain.escrowAddress, ESCROW_ABI, "createContest", [
+    ASSET_TYPE[payload.type], amount, BigInt(Math.floor(new Date(payload.deadlineAt).getTime() / 1000)), Number(payload.cap), briefHash(payload),
+  ]);
+  await waitForFinalizedTransaction(contestHash);
+  return contestHash;
 }
 
 function contestRow(contest) {
@@ -358,7 +411,8 @@ async function connectWallet() {
   }
   const accounts = await window.ethereum.request({ method:"eth_requestAccounts" });
   state.wallet = state.authMode === "signature" ? await authenticateWallet(accounts[0]) : accounts[0];
-  updateWalletUI(); notify(`Wallet verified · AUSD ${AUSD_TESTNET.slice(0,8)}…`);
+  const token = state.chain.ausdAddress ? `${state.chain.ausdAddress.slice(0,8)}…` : "not configured";
+  updateWalletUI(); notify(`Wallet verified · AUSD ${token}`);
 }
 
 function updateWalletUI() {
@@ -396,6 +450,7 @@ document.querySelector("#contestForm").addEventListener("submit", async event =>
   try {
     const headers={"content-type":"application/json"};
     if(state.wallet) headers["x-wallet-address"]=state.wallet;
+    if(state.authMode === "signature") payload.txHash=await fundContestOnchain(payload);
     const response=await fetch("/api/contests",{method:"POST",headers,body:JSON.stringify(payload)});
     const result=await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(result.error || "Contest could not be created.");
@@ -410,6 +465,7 @@ async function boot() {
     const healthResponse=await fetch("/api/health");
     const health=await healthResponse.json();
     state.authMode=health.walletWrites === "signature" ? "signature" : "demo";
+    state.chain={ configured:Boolean(health.chainVerificationConfigured && health.ausdAddress && health.escrowAddress), ausdAddress:health.ausdAddress || null, escrowAddress:health.escrowAddress || null };
     if(state.authMode === "signature") {
       const sessionResponse=await fetch("/api/auth/session");
       if(sessionResponse.ok) state.wallet=(await sessionResponse.json()).address;

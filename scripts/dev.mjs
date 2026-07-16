@@ -1,11 +1,27 @@
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, stat } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
+import { build } from "esbuild";
 
 const root = resolve(import.meta.dirname, "..");
 const production = process.argv.includes("--production");
-const publicDir = resolve(root, production ? "dist" : "public");
+const publicDir = resolve(root, production ? "dist" : ".dev");
 const port = Number(process.env.PORT || 4173);
+
+if (!production) {
+  await rm(publicDir, { recursive: true, force: true });
+  await mkdir(publicDir, { recursive: true });
+  await cp(resolve(root, "public"), publicDir, { recursive: true });
+  await build({
+    entryPoints: [resolve(root, "public", "app.js")],
+    outfile: resolve(publicDir, "app.js"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    logLevel: "warning",
+  });
+}
 
 const contests = [
   {
@@ -70,7 +86,7 @@ const mime = {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
-  if (url.pathname === "/api/health") return json(res, 200, { ok: true, chainId: 10143, token: "AUSD" });
+  if (url.pathname === "/api/health") return json(res, 200, { ok: true, chainId: 10143, token: "AUSD", walletWrites: "demo-only", chainVerificationConfigured: false, ausdAddress: null, escrowAddress: null });
   if (url.pathname === "/api/contests" && req.method === "GET") return json(res, 200, { contests });
   if (url.pathname === "/api/contests" && req.method === "POST") {
     let raw = "";

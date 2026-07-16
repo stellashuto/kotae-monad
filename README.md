@@ -62,7 +62,10 @@ on a published deployment.
 Every state-changing marketplace API also verifies a finalized Monad Testnet
 receipt, its signer, the configured escrow address, and the expected contract
 event before updating D1. Configure `MONAD_RPC_URL` and `KOTAE_ESCROW_ADDRESS`
-through the runtime environment. A transaction hash can be recorded only once.
+through the runtime environment, and expose the deployed token through
+`AUSD_ADDRESS`. A transaction hash can be recorded only once. In signature mode,
+the browser's contest creation flow approves AUSD, calls `createContest`, waits
+for Monad finality, and only then asks the API to record the matching event.
 Eligibility updates additionally require `KOTAE_EVALUATOR_SECRET` with at least
 32 characters and a matching onchain `EligibilityRecorded` event.
 
