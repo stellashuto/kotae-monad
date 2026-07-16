@@ -49,7 +49,7 @@ test("featured contest continues the strawberry soda hero story", async () => {
 });
 
 test("cancellation API enforces requester and zero-submission rules", async () => {
-  const worker = await readFile(new URL("../worker/index.ts", import.meta.url), "utf8");
+  const worker = await readFile(new URL("../worker/index.js", import.meta.url), "utf8");
   assert.match(worker, /Only requester can cancel the contest/);
   assert.match(worker, /COUNT\(\*\) AS total FROM submissions/);
   assert.match(worker, /before the first submission/);
@@ -58,7 +58,7 @@ test("cancellation API enforces requester and zero-submission rules", async () =
 });
 
 test("submission API allows two replacements without a second bond", async () => {
-  const worker = await readFile(new URL("../worker/index.ts", import.meta.url), "utf8");
+  const worker = await readFile(new URL("../worker/index.js", import.meta.url), "utf8");
   assert.match(worker, /existing\.version >= 3/);
   assert.match(worker, /bondRequired: !existing/);
   assert.match(worker, /replacementsRemaining: 3 - version/);
@@ -71,7 +71,7 @@ test("submission API allows two replacements without a second bond", async () =>
 });
 
 test("slot pack API adds five slots and splits its fee", async () => {
-  const worker = await readFile(new URL("../worker/index.ts", import.meta.url), "utf8");
+  const worker = await readFile(new URL("../worker/index.js", import.meta.url), "utf8");
   assert.match(worker, /Only requester can add slots/);
   assert.match(worker, /packs >= 3/);
   assert.match(worker, /valid_cap \+ 5/);
@@ -83,7 +83,7 @@ test("slot pack API adds five slots and splits its fee", async () => {
 test("timeout settlement releases funds without selecting a winner", async () => {
   const [app, worker, schema] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../worker/index.js", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8")
   ]);
   assert.match(app, /requestTimeoutSettlement/);
@@ -97,4 +97,41 @@ test("timeout settlement releases funds without selecting a winner", async () =>
   assert.match(worker, /\/timeout-settle\$/);
   assert.match(worker, /rightsTransferred: false/);
   assert.match(schema, /'Short Video'/);
+});
+
+test("production writes require wallet sessions and finalized chain receipts", async () => {
+  const [build, source, auth, chain] = await Promise.all([
+    readFile(new URL("../scripts/build.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../worker/index.js", import.meta.url), "utf8"),
+    readFile(new URL("../worker/auth.js", import.meta.url), "utf8"),
+    readFile(new URL("../worker/chain.js", import.meta.url), "utf8")
+  ]);
+  assert.match(build, /bundle: true/);
+  assert.match(source, /createWalletChallenge/);
+  assert.match(source, /verifyEscrowTransaction/);
+  assert.match(auth, /verifyMessage/);
+  assert.match(auth, /HttpOnly; SameSite=Strict/);
+  assert.match(chain, /eth_getTransactionReceipt/);
+  assert.match(chain, /"finalized"/);
+  assert.doesNotMatch(source, /demo:anonymous/);
+});
+
+test("demo wallet and evaluator credentials are validated before data access", async () => {
+  const [{ authenticatedWallet }, { default: worker }] = await Promise.all([
+    import(new URL("../worker/auth.js", import.meta.url)),
+    import(new URL("../worker/index.js", import.meta.url))
+  ]);
+  const invalidWallet = await authenticatedWallet(new Request("https://kotae.test/api/contests", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-wallet-address": "demo:creator" },
+    body: "{}"
+  }), { KOTAE_AUTH_MODE: "demo" }, {});
+  assert.equal(invalidWallet.status, 401);
+
+  const unconfiguredEvaluator = await worker.fetch(new Request("https://kotae.test/api/submissions/sub_1/eligibility", {
+    method: "PATCH",
+    headers: { "content-type": "application/json", "x-kotae-worker-secret": "configured" },
+    body: JSON.stringify({ status: "VALID" })
+  }), {});
+  assert.equal(unconfiguredEvaluator.status, 503);
 });

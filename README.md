@@ -16,8 +16,8 @@ Requires Node.js 22 or newer. No package installation is required.
 npm run dev
 ```
 
-Open `http://127.0.0.1:4173`. The local server provides an in-memory API so the
-complete create → submit → check → select flow works without credentials.
+Open `http://127.0.0.1:4173`. The local server provides an in-memory API for the
+prototype flow and does not send transactions or persist production data.
 
 ```bash
 npm test
@@ -36,6 +36,23 @@ requester-only winner selection, 85/5/10 settlement, and timeout settlement.
 
 ## Production data
 
-`.openai/hosting.json` requests D1 as `DB` and R2 as `UPLOADS`. The Worker API in
-`worker/index.ts` keeps private originals in R2 and contest metadata in D1.
-The fixed product rules are in `outputs/kotae-mvp-spec.md`.
+`.openai/hosting.json` requests D1 as `DB` and R2 as `UPLOADS`. The canonical
+Worker API in `worker/index.js` keeps private originals in R2 and contest
+metadata in D1. The fixed product rules are in `outputs/kotae-mvp-spec.md`.
+
+Production writes use a one-time EIP-191 wallet challenge. Challenges and hashed
+HTTP-only sessions are stored in D1; challenge reuse, expired sessions, and
+cross-origin writes are rejected. `KOTAE_AUTH_MODE=demo` enables the legacy
+`x-wallet-address` header only for local or private testing and must never be set
+on a published deployment.
+
+Every state-changing marketplace API also verifies a finalized Monad Testnet
+receipt, its signer, the configured escrow address, and the expected contract
+event before updating D1. Configure `MONAD_RPC_URL` and `KOTAE_ESCROW_ADDRESS`
+through the runtime environment. A transaction hash can be recorded only once.
+Eligibility updates additionally require `KOTAE_EVALUATOR_SECRET` with at least
+32 characters and a matching onchain `EligibilityRecorded` event.
+
+Apply `db/migrations/0002_wallet_auth_and_chain.sql` before running this Worker
+against an existing database. The values expected for local configuration are
+listed in `.env.example`; it intentionally contains no credentials.

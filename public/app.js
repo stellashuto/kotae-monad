@@ -9,7 +9,7 @@ const fallbackContests = [
   { id:"timeout-demo", title:"Editorial poster set · timeout ready", type:"Photo / Visual", brief:"Create an editorial poster series for an independent design festival.", budget:10, deadline:"Ended · 48h elapsed", validCount:3, cap:10, submissions:4, status:"JUDGING_EXPIRED", requester:"0x4E10…37B8", must:["Festival date","Three coordinated posters","Print-ready composition"], avoid:["Stock templates","Unreadable event details"] }
 ];
 
-const state = { contests: [], filter: "All", sort: "ending", wallet: null, currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
+const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
 const views = [...document.querySelectorAll("[data-view]")];
 const toast = document.querySelector("#toast");
 
@@ -327,9 +327,28 @@ function showSettlementReceipt(contest, entry, winnerTotal, participation, platf
   receipt.querySelector("#receiptDashboard").onclick = () => { receipt.remove(); renderContests(); navigate("dashboard"); notify(`Entry ${entry} unlocked · ${winnerTotal.toFixed(2)} AUSD paid to the winner.`); };
 }
 
+async function authenticateWallet(address) {
+  const challengeResponse = await fetch("/api/auth/challenge", {
+    method:"POST",
+    headers:{"content-type":"application/json"},
+    body:JSON.stringify({address})
+  });
+  const challenge = await challengeResponse.json().catch(()=>({}));
+  if(!challengeResponse.ok) throw new Error(challenge.error || "Wallet verification could not start.");
+  const signature = await window.ethereum.request({ method:"personal_sign", params:[challenge.message,address] });
+  const verifyResponse = await fetch("/api/auth/verify", {
+    method:"POST",
+    headers:{"content-type":"application/json"},
+    body:JSON.stringify({challengeId:challenge.challengeId,address,signature})
+  });
+  const verification = await verifyResponse.json().catch(()=>({}));
+  if(!verifyResponse.ok) throw new Error(verification.error || "Wallet signature could not be verified.");
+  return verification.address;
+}
+
 async function connectWallet() {
   if (!window.ethereum) {
-    state.wallet = "0x8F216d7b25d2F18C90A";
+    state.wallet = "0x000000000000000000000000000000000000dEaD";
     updateWalletUI(); notify("Demo wallet connected. Install a wallet to sign Monad transactions."); return;
   }
   try {
@@ -338,7 +357,8 @@ async function connectWallet() {
     if (error.code === 4902) await window.ethereum.request({ method:"wallet_addEthereumChain", params:[{chainId:MONAD_CHAIN_ID,chainName:"Monad Testnet",nativeCurrency:{name:"MON",symbol:"MON",decimals:18},rpcUrls:["https://testnet-rpc.monad.xyz"],blockExplorerUrls:["https://testnet.monadexplorer.com"]}] });
   }
   const accounts = await window.ethereum.request({ method:"eth_requestAccounts" });
-  state.wallet = accounts[0]; updateWalletUI(); notify(`Wallet connected · AUSD ${AUSD_TESTNET.slice(0,8)}…`);
+  state.wallet = state.authMode === "signature" ? await authenticateWallet(accounts[0]) : accounts[0];
+  updateWalletUI(); notify(`Wallet verified · AUSD ${AUSD_TESTNET.slice(0,8)}…`);
 }
 
 function updateWalletUI() {
@@ -374,14 +394,30 @@ document.querySelector("#contestForm").addEventListener("submit", async event =>
   const payload={ title:form.get("title"), brief:form.get("brief"), type:typeButton.dataset.type, budget:Number(form.get("budget")), deadline, deadlineAt:new Date(Date.now() + deadlineOffset).toISOString(), cap:Number(typeButton.dataset.cap), must:String(form.get("must")||"").split("\n").filter(Boolean).slice(0,5), avoid:String(form.get("avoid")||"").split("\n").filter(Boolean).slice(0,5) };
   const submit=event.submitter; submit.disabled=true; submit.textContent="Locking AUSD on Monad…";
   try {
-    const response=await fetch("/api/contests",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-    const result=await response.json(); state.contests.unshift(result.contest); renderContests(); openContest(result.contest.id); notify(`Contest funded · ${payload.budget.toFixed(2)} AUSD locked.`);
-  } catch {
-    const contest={...payload,id:`contest-${Date.now()}`,validCount:0,submissions:0,status:"OPEN",requester:"0x8F21…C90A"}; state.contests.unshift(contest); renderContests(); openContest(contest.id); notify("Contest created in demo mode.");
+    const headers={"content-type":"application/json"};
+    if(state.wallet) headers["x-wallet-address"]=state.wallet;
+    const response=await fetch("/api/contests",{method:"POST",headers,body:JSON.stringify(payload)});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(result.error || "Contest could not be created.");
+    state.contests.unshift(result.contest); renderContests(); openContest(result.contest.id); notify(`Contest funded · ${payload.budget.toFixed(2)} AUSD locked.`);
+  } catch (error) {
+    notify(error.message || "Contest could not be created.");
   } finally { submit.disabled=false; submit.innerHTML='Fund & open contest <span>↗</span>'; }
 });
 
 async function boot() {
+  try {
+    const healthResponse=await fetch("/api/health");
+    const health=await healthResponse.json();
+    state.authMode=health.walletWrites === "signature" ? "signature" : "demo";
+    if(state.authMode === "signature") {
+      const sessionResponse=await fetch("/api/auth/session");
+      if(sessionResponse.ok) state.wallet=(await sessionResponse.json()).address;
+      updateWalletUI();
+    }
+  } catch {
+    state.authMode="demo";
+  }
   try { const response=await fetch("/api/contests"); if(!response.ok) throw new Error(); const remote=(await response.json()).contests; state.contests=remote.length?remote:[...fallbackContests]; }
   catch { state.contests=[...fallbackContests]; }
   renderContests();

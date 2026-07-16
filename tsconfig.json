@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "lib": ["ES2022", "DOM", "WebWorker"]
   },
-  "include": ["worker/**/*.ts", "db/**/*.ts"]
+  "include": ["db/**/*.ts"]
 }
