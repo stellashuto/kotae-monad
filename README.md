@@ -36,6 +36,8 @@ The canonical Monad Testnet AUSD address is
 `0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`.
 Connected Testnet wallets can request demo AUSD from the header's faucet button;
 the configured Agora faucet is `0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`.
+KOTAE is deployed on Monad Testnet at
+`0xa85De5e792A04B8449D1616415114aAF8eD7Ab54`.
 
 The contract implements payment locking, zero-submission cancellation, refundable
 submission bonds, two replacements, eligibility-only oracle permissions,

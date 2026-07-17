@@ -5,5 +5,7 @@
   "ausdFaucetAddress": "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C",
   "platformRecipient": "0xE185cFb28854C66A2Fe7972608B3353cebDd8760",
   "eligibilityOracle": "0xE185cFb28854C66A2Fe7972608B3353cebDd8760",
-  "escrowAddress": null
+  "escrowAddress": "0xa85De5e792A04B8449D1616415114aAF8eD7Ab54",
+  "deploymentTxHash": "0xf3af3ece9f1fa15961becc0ae66de6aa4581fd78f12160caebfca8da15089f35",
+  "deploymentBlock": 45700059
 }
