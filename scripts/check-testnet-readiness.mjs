@@ -4,8 +4,8 @@ import { createPublicClient, getAddress, http, parseAbi } from "viem";
 const root = new URL("../", import.meta.url);
 const config = JSON.parse(await readFile(new URL("config/monad-testnet.json", root), "utf8"));
 const hosting = JSON.parse(await readFile(new URL(".openai/hosting.json", root), "utf8"));
-const migration1 = await readFile(new URL("db/migrations/0001_outcome.sql", root), "utf8");
-const migration2 = await readFile(new URL("db/migrations/0002_wallet_auth_and_chain.sql", root), "utf8");
+const migration1 = await readFile(new URL("drizzle/0001_outcome.sql", root), "utf8");
+const migration2 = await readFile(new URL("drizzle/0002_wallet_auth_and_chain.sql", root), "utf8");
 const issues = [];
 
 if (config.chainId !== 10143) issues.push("Unexpected chain ID");
@@ -50,7 +50,7 @@ if (issues.length) {
     escrow,
     ausd: getAddress(ausd),
     bindings: { d1: hosting.d1, r2: hosting.r2 },
-    evaluatorSecretConfigured: Boolean(process.env.KOTAE_EVALUATOR_SECRET?.length >= 32),
-    note: "Set KOTAE_EVALUATOR_SECRET in the hosting secret manager before publication.",
+    localEvaluatorSecretConfigured: Boolean(process.env.KOTAE_EVALUATOR_SECRET?.length >= 32),
+    note: "Hosted secrets are managed separately in Sites and are not readable by this local check.",
   }, null, 2));
 }

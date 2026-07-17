@@ -57,7 +57,8 @@ npm run contract:deploy:testnet
 The non-secret Testnet role defaults are stored in `config/monad-testnet.json`.
 Environment values may override them. Never place a private key in that file.
 `npm run readiness:testnet` verifies the deployed bytecode and constructor roles,
-as well as the D1 and R2 declarations, without requiring a signing key.
+as well as the D1 and R2 declarations, without requiring a signing key. Hosted
+secrets are intentionally outside this local check.
 
 ## Production data
 
@@ -81,6 +82,6 @@ for Monad finality, and only then asks the API to record the matching event.
 Eligibility updates additionally require `KOTAE_EVALUATOR_SECRET` with at least
 32 characters and a matching onchain `EligibilityRecorded` event.
 
-Apply `db/migrations/0002_wallet_auth_and_chain.sql` before running this Worker
+Apply `drizzle/0002_wallet_auth_and_chain.sql` before running this Worker
 against an existing database. The values expected for local configuration are
 listed in `.env.example`; it intentionally contains no credentials.
