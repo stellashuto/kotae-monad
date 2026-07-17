@@ -24,6 +24,7 @@ prototype flow and does not send transactions or persist production data.
 npm test
 npm run contract:compile
 npm run contract:test
+npm run readiness:testnet
 npm run build
 ```
 
@@ -55,6 +56,8 @@ npm run contract:deploy:testnet
 
 The non-secret Testnet role defaults are stored in `config/monad-testnet.json`.
 Environment values may override them. Never place a private key in that file.
+`npm run readiness:testnet` verifies the deployed bytecode and constructor roles,
+as well as the D1 and R2 declarations, without requiring a signing key.
 
 ## Production data
 
