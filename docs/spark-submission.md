@@ -12,7 +12,7 @@ An onchain marketplace where buyers fund a result and creators compete with fini
 When I need a small poster, landing page, short video, or micro-tool, I either pay one person before seeing the result or sort through speculative AI attempts. The buyer carries the quality risk, while serious creators compete with spam and unclear payment promises.
 
 **Solution**
-KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Automated evaluation checks only objective brief compliance; the requester chooses the winner. Finalized Monad receipts are verified before the app records any state change, and the escrow settles every AUSD with fixed rules.
+KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Deterministic preflight verifies file mechanics, and a configured oracle records objective brief compliance onchain; the requester chooses the winner. Finalized Monad receipts are verified before the app records any state change, and the escrow settles every AUSD with fixed rules.
 
 **Project URL**
 https://outcome-ausd-spark.shuto-kajita.chatgpt.site

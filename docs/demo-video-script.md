@@ -12,7 +12,7 @@ Show the KOTAE home page.
 
 Scroll through “How it works” and show the settlement split.
 
-> I lock one AUSD budget on Monad Testnet. Creators compete with finished work and a refundable submission bond. Eligibility checks can reject broken or off-brief work, but only I can choose the winner.
+> I lock one AUSD budget on Monad Testnet. Creators compete with finished work and a refundable submission bond. Deterministic preflight rejects broken files, an oracle records objective compliance onchain, and only I can choose the winner.
 
 ## 0:40–1:20 — Create a live contest
 

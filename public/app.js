@@ -6,6 +6,7 @@ const AUSD_FAUCET_ABI = parseAbi(["function requestFunds(address recipient)"]);
 const ESCROW_ABI = parseAbi([
   "function createContest(uint8 assetType, uint128 baseBudget, uint40 submissionDeadline, uint16 validCap, bytes32 briefHash) returns (uint256 contestId)",
   "function submitWork(uint256 contestId, bytes32 contentHash) returns (uint256 submissionId)",
+  "function recordEligibility(uint256 submissionId, uint8 eligibility, bytes32 reasonHash)",
   "function cancelBeforeFirstSubmission(uint256 contestId)",
   "function addSlotPack(uint256 contestId)",
   "function chooseWinner(uint256 contestId, uint256 winnerSubmissionId)",
@@ -176,11 +177,19 @@ document.querySelectorAll("[data-route]").forEach(link => link.addEventListener(
   event.preventDefault(); navigate(link.dataset.route);
 }));
 
-function entryCard(number, status = "VALID", theme = "", canSelect = true, record = {}) {
+function eligibilityReasonHashPayload(payload) {
+  return keccak256(stringToHex(JSON.stringify({
+    reasonCodes: Array.isArray(payload.reasonCodes) ? payload.reasonCodes.map(String) : [],
+    message: payload.message ? String(payload.message) : null,
+  })));
+}
+
+function entryCard(number, status = "VALID", theme = "", canSelect = true, record = {}, canReview = false) {
   const creator = record.creator ? `${record.creator.slice(0,6)}…${record.creator.slice(-4)}` : `Creator ${number}`;
   const chainSubmission = record.chainSubmissionId ? `#${record.chainSubmissionId}` : "Pending onchain ID";
   const privateFile = record.id ? `<a class="private-file-link" href="/api/submissions/${encodeURIComponent(record.id)}/file" target="_blank" rel="noreferrer">Open private finished work ↗</a>` : "";
-  return `<article class="entry-card"><div class="entry-proof"><span>ONCHAIN ENTRY</span><strong>${escapeHtml(chainSubmission)}</strong><small>${escapeHtml(creator)}</small></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(creator)}</strong><span>Original stored privately · Access is wallet-gated</span></p>${privateFile}<button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${canSelect ? "Select this outcome" : "Judging window expired"}</button></article>`;
+  const reviewAction = canReview && status === "CHECKING" ? `<button class="review-eligibility" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}">Review objective eligibility</button>` : "";
+  return `<article class="entry-card"><div class="entry-proof"><span>ONCHAIN ENTRY</span><strong>${escapeHtml(chainSubmission)}</strong><small>${escapeHtml(creator)}</small></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(creator)}</strong><span>Original stored privately · Access is wallet-gated</span></p>${privateFile}${reviewAction}<button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${canSelect ? "Select this outcome" : "Judging window expired"}</button></article>`;
 }
 
 async function openContest(id) {
@@ -199,13 +208,19 @@ async function openContest(id) {
       contest.entries = [];
     }
   }
+  if (state.wallet && Array.isArray(contest.entries)) {
+    const ownEntry = contest.entries.find(entry => entry.creator?.toLowerCase() === state.wallet.toLowerCase());
+    if (ownEntry) {
+      state.creatorVersions[contest.id] = Number(ownEntry.version || 1);
+      state.creatorEligibility[contest.id] = ownEntry.eligibility;
+    }
+  }
   const percent = Math.min(100, Math.round((contest.validCount / contest.cap) * 100));
   const isOpen = contest.status === "OPEN";
   const timeoutReady = contest.status === "JUDGING_EXPIRED";
-  const entryRecords = Array.isArray(contest.entries)
-    ? contest.entries.filter(entry => entry.eligibility === "VALID")
-    : [];
-  const entries = entryRecords.map((entry,i) => entryCard(i+1, entry.eligibility, "", isOpen && (state.authMode === "demo" || Boolean(entry.id && entry.chainSubmissionId)), entry)).join("") || `<p>No eligible finished work has been recorded yet.</p>`;
+  const entryRecords = Array.isArray(contest.entries) ? contest.entries : [];
+  const isOracle = Boolean(state.wallet && state.chain.eligibilityOracle && state.wallet.toLowerCase() === state.chain.eligibilityOracle.toLowerCase());
+  const entries = entryRecords.map((entry,i) => entryCard(i+1, entry.eligibility, "", isOpen && (state.authMode === "demo" || Boolean(entry.id && entry.chainSubmissionId)), entry, isOracle)).join("") || `<p>No finished work has been recorded yet.</p>`;
   const cancelAction = contest.status === "OPEN" && contest.submissions === 0 ? `<button class="cancel-contest" id="cancelContest">Cancel & refund before first submission</button>` : "";
   const creatorVersion = state.creatorVersions[contest.id] || 0;
   const submitLabel = creatorVersion === 0 ? "Submit finished work ↗" : creatorVersion < 3 ? `Replace your submission · ${3 - creatorVersion} left` : "Replacement limit reached";
@@ -218,13 +233,14 @@ async function openContest(id) {
       <aside class="prize-box"><span>BASE PRIZE LOCKED</span><strong>${contest.budget.toFixed(2)}</strong><small>AUSD · MONAD TESTNET</small><div class="capacity"><div><i style="width:${percent}%"></i></div><p><span>${contest.validCount} VALID</span><span>${contest.cap} MAX</span></p></div>${submissionAction}${slotAction}${cancelAction}</aside>
     </div>
     <div class="detail-body"><section class="rules"><div class="section-kicker">THE BRIEF</div><div class="rule-group"><h2>Acceptance rules</h2><h3>Must include</h3><ul>${(contest.must || []).map(rule=>`<li>${escapeHtml(rule)}</li>`).join("")}</ul></div><div class="rule-group"><h3>Avoid</h3><ul>${(contest.avoid || []).map(rule=>`<li>${escapeHtml(rule)}</li>`).join("")}</ul></div><div class="rule-group"><h3>License</h3><ul><li>Commercial rights transfer to requester only for the selected work</li><li>Losing creators keep full rights to their work</li></ul></div></section>
-    <section class="entries"><div class="section-kicker">WALLET-GATED FINISHED WORK</div><h2>${contest.validCount} valid outcomes</h2><div class="entry-grid">${entries}</div></section></div>
+    <section class="entries"><div class="section-kicker">WALLET-GATED FINISHED WORK</div><h2>${contest.validCount} valid · ${contest.submissions} submitted</h2><div class="entry-grid">${entries}</div></section></div>
   </div>`;
   document.querySelector("[data-back]").onclick = () => navigate("browse");
   document.querySelector("#submitEntry")?.addEventListener("click", showSubmitDialog);
   document.querySelector("#settleTimeout")?.addEventListener("click", () => requestTimeoutSettlement(contest));
   document.querySelector("#addSlotPack")?.addEventListener("click", () => requestSlotPack(contest));
   document.querySelector("#cancelContest")?.addEventListener("click", () => requestContestCancellation(contest));
+  document.querySelectorAll(".review-eligibility").forEach(button => button.onclick = () => reviewEligibilityOnchain(contest, button.dataset.submission, button.dataset.chainSubmission));
   document.querySelectorAll(".select-winner").forEach(button => button.onclick = () => settleContest(contest, button.dataset.entry, button.dataset.submission, button.dataset.chainSubmission));
   navigate("contest");
 }
@@ -270,8 +286,6 @@ async function reviewSubmission(file, contest, hash) {
     { label:"File integrity", detail:file.size >= 1024 ? `${(file.size/1024).toFixed(1)} KB readable` : "File is empty or too small", pass:file.size >= 1024, source:"SYSTEM" },
     { label:"Format & size", detail:formatPass && file.size <= maxSize ? `${file.type || "Extension verified"} within limit` : "Unsupported format or file exceeds limit", pass:formatPass && file.size <= maxSize, source:"SYSTEM" },
     { label:"Duplicate screening", detail:duplicate ? "Identical SHA-256 already submitted" : `Unique hash ${hash.slice(0,8)}…`, pass:!duplicate, source:"SYSTEM" },
-    { label:"Brief requirements", detail:`Matches ${Math.min(5,(contest.must || []).length)} required constraints`, pass:true, source:"AI" },
-    { label:"Prohibited content", detail:`No conflict with ${(contest.avoid || []).length} avoid rules`, pass:true, source:"AI" },
     { label:"Rights attestation", detail:"Creator ownership confirmation recorded", pass:true, source:"CREATOR" }
   ];
   if (contest.type === "Short Video") checks.splice(2,0,{ label:"Video duration", detail:duration > 0 && duration <= 30 ? `${duration.toFixed(1)} seconds` : duration > 30 ? `${duration.toFixed(1)} seconds exceeds the 30-second limit` : "Video metadata could not be read", pass:duration > 0 && duration <= 30, source:"SYSTEM" });
@@ -279,11 +293,37 @@ async function reviewSubmission(file, contest, hash) {
 }
 
 function showEligibilityReport(contest, file, review, version, replacing) {
-  const status = review.valid ? "VALID" : "NEEDS FIX";
+  const status = review.valid ? "CHECKING" : "NEEDS FIX";
   const rows = review.checks.map(check => `<li class="${check.pass ? "pass" : "fail"}"><i>${check.pass ? "✓" : "!"}</i><div><strong>${escapeHtml(check.label)}</strong><span>${escapeHtml(check.detail)}</span></div><em>${check.source}</em></li>`).join("");
-  const report = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">ELIGIBILITY REVIEW · VERSION ${version}</div><div class="eligibility-result ${review.valid ? "valid" : "needs-fix"}"><span>${status}</span><strong>${review.valid ? "Eligible for requester review" : "Fix the flagged file checks"}</strong><p>${review.valid ? "A protected preview can now enter the competition." : "No valid-entry slot was consumed and no new bond was locked."}</p></div><ul class="eligibility-checks">${rows}</ul><div class="eligibility-boundary"><strong>AI checks eligibility—not taste.</strong><span>The requester still chooses the winner from all valid outcomes.</span></div><button class="primary-button wide" id="eligibilityContinue">${review.valid ? "View watermarked entry" : replacing ? "Choose another replacement" : "Return to submission"} <span>→</span></button><small class="modal-note">SHA-256 ${review.hash.slice(0,16)}… · ${escapeHtml(file.name)}</small>`);
+  const report = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">OBJECTIVE PREFLIGHT · VERSION ${version}</div><div class="eligibility-result ${review.valid ? "valid" : "needs-fix"}"><span>${status}</span><strong>${review.valid ? "Uploaded onchain · awaiting oracle review" : "Fix the flagged file checks"}</strong><p>${review.valid ? "The format, size, integrity, duplicate hash, and creator attestation passed. Brief compliance is not auto-approved." : "No valid-entry slot was consumed."}</p></div><ul class="eligibility-checks">${rows}</ul><div class="eligibility-boundary"><strong>Preflight checks mechanics—not taste.</strong><span>The eligibility oracle records brief compliance onchain; the requester separately chooses the winner.</span></div><button class="primary-button wide" id="eligibilityContinue">${review.valid ? "Return to onchain entries" : replacing ? "Choose another replacement" : "Return to submission"} <span>→</span></button><small class="modal-note">SHA-256 ${review.hash.slice(0,16)}… · ${escapeHtml(file.name)}</small>`);
   report.querySelector(".modal").classList.add("eligibility-modal");
   report.querySelector("#eligibilityContinue").onclick = () => { report.remove(); openContest(contest.id); };
+}
+
+function reviewEligibilityOnchain(contest, submissionId, chainSubmissionId) {
+  const modal = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">ONCHAIN ELIGIBILITY ORACLE</div><h2>Record objective brief compliance</h2><p>Open the wallet-gated original first. Confirm only the published must/avoid rules, file integrity, and ownership attestation. Creative preference belongs in winner selection—not here.</p><div class="eligibility-boundary"><strong>Submission #${escapeHtml(chainSubmissionId)}</strong><span>This decision is written to Monad Testnet and cannot be faked by a local toast.</span></div><label class="field"><span>Reason note</span><textarea id="eligibilityMessage" rows="3" maxlength="240">Objective file checks and published brief constraints reviewed.</textarea></label><div class="oracle-actions"><button class="primary-button" id="markEligible">Mark eligible</button><button class="danger-button" id="markNeedsFix">Needs fix</button></div>`);
+  const record = async (status) => {
+    const reasonCodes = status === "VALID" ? [] : ["BRIEF_CONSTRAINT_MISMATCH"];
+    const message = modal.querySelector("#eligibilityMessage").value.trim() || null;
+    const payload = { status, reasonCodes, message };
+    const active = status === "VALID" ? modal.querySelector("#markEligible") : modal.querySelector("#markNeedsFix");
+    active.disabled = true; active.textContent = "Recording on Monad…";
+    try {
+      const txHash = await callEscrow("recordEligibility", [BigInt(chainSubmissionId), status === "VALID" ? 1 : 2, eligibilityReasonHashPayload(payload)]);
+      const response = await fetch(`/api/submissions/${encodeURIComponent(submissionId)}/eligibility`, { method:"PATCH", headers:{"content-type":"application/json","x-wallet-address":state.wallet}, body:JSON.stringify({...payload,txHash}) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Eligibility could not be recorded.");
+      const entry = contest.entries?.find(item => item.id === submissionId);
+      if (entry) entry.eligibility = status;
+      contest.validCount = contest.entries?.filter(item => item.eligibility === "VALID").length || 0;
+      modal.remove(); openContest(contest.id); notify(`Eligibility recorded onchain · ${status}.`);
+    } catch (error) {
+      active.disabled = false; active.textContent = status === "VALID" ? "Mark eligible" : "Needs fix";
+      notify(error.message || "Eligibility could not be recorded.");
+    }
+  };
+  modal.querySelector("#markEligible").onclick = () => record("VALID");
+  modal.querySelector("#markNeedsFix").onclick = () => record("NEEDS_FIX");
 }
 
 function showSubmitDialog() {
@@ -296,7 +336,7 @@ function showSubmitDialog() {
   const nextVersion = currentVersion + 1;
   const replacementsAfterUpload = Math.max(0, 3 - nextVersion);
   const actionLabel = replacing ? "Replace work & rerun eligibility" : "Deposit bond & run eligibility check";
-  const modal = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">CREATOR SUBMISSION · VERSION ${nextVersion}</div><h2>${replacing ? "Replace your submission" : "Submit finished work"}</h2><p>${escapeHtml(requirements)}</p><label class="drop-zone"><input type="file" id="entryFile" required /><b>${replacing ? "Choose the corrected original" : "Drop your original here"}</b><span>The system creates a watermarked preview. Requesters cannot access the original before settlement.</span></label><div class="bond-row"><span>Refundable submission bond</span><strong>${replacing ? "Already secured" : `${bonds[contest.type]} AUSD`}</strong></div><label class="check-row"><input id="ownershipCheck" type="checkbox" /><span>I created or control the rights to this work and it follows the brief.</span></label><button class="primary-button wide" id="runCheck">${actionLabel} <span>↗</span></button><small class="modal-note">${replacementsAfterUpload} replacement${replacementsAfterUpload === 1 ? "" : "s"} will remain after this upload. AI checks eligibility only—it never chooses the winner.</small>`);
+  const modal = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">CREATOR SUBMISSION · VERSION ${nextVersion}</div><h2>${replacing ? "Replace your submission" : "Submit finished work"}</h2><p>${escapeHtml(requirements)}</p><label class="drop-zone"><input type="file" id="entryFile" required /><b>${replacing ? "Choose the corrected original" : "Choose your finished original"}</b><span>The original is stored privately. The requester can inspect it for eligibility and selection; commercial rights transfer only after settlement.</span></label><div class="bond-row"><span>Refundable submission bond</span><strong>${replacing ? "Already secured" : `${bonds[contest.type]} AUSD`}</strong></div><label class="check-row"><input id="ownershipCheck" type="checkbox" /><span>I created or control the rights to this work and it follows the brief.</span></label><button class="primary-button wide" id="runCheck">${actionLabel} <span>↗</span></button><small class="modal-note">${replacementsAfterUpload} replacement${replacementsAfterUpload === 1 ? "" : "s"} will remain after this upload. Deterministic preflight checks file mechanics; the onchain oracle records brief compliance.</small>`);
   modal.querySelector("#runCheck").onclick = async () => {
     const file = modal.querySelector("#entryFile").files[0];
     if (!file || !modal.querySelector("#ownershipCheck").checked) return notify("Add a file and confirm ownership first.");
@@ -309,6 +349,7 @@ function showSubmitDialog() {
     }
     button.textContent = replacing ? "Uploading replacement privately…" : "Locking bond & uploading privately…";
     let recordedVersion = nextVersion;
+    let recordedSubmission = null;
     try {
       const form = new FormData(); form.append("file", file);
       if (state.authMode === "signature") {
@@ -317,7 +358,10 @@ function showSubmitDialog() {
         form.append("txHash", txHash);
       }
       const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/submissions`, { method:"POST", headers:{"x-wallet-address":state.wallet || "demo:creator"}, body:form });
-      if (response.ok) recordedVersion = Number((await response.json()).version || nextVersion);
+      if (response.ok) {
+        recordedSubmission = await response.json();
+        recordedVersion = Number(recordedSubmission.version || nextVersion);
+      }
       else if (response.status !== 404) {
         const result = await response.json().catch(() => ({}));
         button.disabled = false; button.innerHTML = `${actionLabel} <span>↗</span>`;
@@ -330,14 +374,12 @@ function showSubmitDialog() {
       }
       // Local demo mode mirrors the interaction without sending funds.
     }
-    button.textContent = "AI checking file integrity and brief fit…";
-    await new Promise(resolve => setTimeout(resolve, 1200));
+    button.textContent = "Confirming objective preflight…";
     state.creatorVersions[contest.id] = recordedVersion;
     state.submissionHashes[contest.id] = [...(state.submissionHashes[contest.id] || []), hash];
-    const wasValid = state.creatorEligibility[contest.id] === "VALID";
-    state.creatorEligibility[contest.id] = "VALID";
+    state.creatorEligibility[contest.id] = "CHECKING";
     if (!replacing) contest.submissions += 1;
-    if (!wasValid) contest.validCount = Math.min(contest.cap, contest.validCount + 1);
+    if (recordedSubmission) contest.entries = null;
     modal.remove(); showEligibilityReport(contest, file, review, recordedVersion, replacing);
   };
 }

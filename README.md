@@ -2,7 +2,7 @@
 
 **Buy the answer. Not the attempts.**
 
-KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on Monad Testnet. A requester locks one budget, creators submit completed outcomes, eligibility checks filter broken or non-compliant work, and the requester chooses the winner.
+KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on Monad Testnet. A requester locks one budget, creators submit completed outcomes, deterministic preflight rejects broken files, and an onchain oracle records brief compliance before the requester chooses the winner.
 
 - **Live app:** https://outcome-ausd-spark.shuto-kajita.chatgpt.site
 - **Public repository:** https://github.com/stellashuto/kotae-monad
@@ -17,7 +17,7 @@ KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on
 
 **Problem:** When I need a small poster, landing page, short video, or micro-tool, I either pay one person before seeing the result or sort through speculative AI attempts. The buyer carries the quality risk, while serious creators compete with spam and unclear payment promises.
 
-**Solution:** KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Automated evaluation can decide only whether a submission follows the brief; it cannot choose the winner. The requester keeps the creative decision, and the contract settles every AUSD according to fixed rules.
+**Solution:** KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Deterministic checks verify file integrity, format, size, and duplicate hashes; the configured oracle records objective brief compliance onchain. It cannot choose the winner. The requester keeps the creative decision, and the contract settles every AUSD according to fixed rules.
 
 **Category:** Monad Testnet
 
@@ -46,7 +46,8 @@ KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on
 4. Confirm the AUSD approval and contest transaction in the wallet.
 5. See the contest appear from the live API with its onchain contest ID.
 6. From a creator wallet, submit a finished file and its bond.
-7. From the requester wallet, open the private file and choose the outcome after eligibility is recorded.
+7. From the oracle wallet, open the private file and record objective eligibility onchain.
+8. From the requester wallet, choose the outcome after eligibility is recorded.
 
 ## Architecture
 

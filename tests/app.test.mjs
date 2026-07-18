@@ -56,6 +56,10 @@ test("live marketplace avoids placeholder contests and exposes real outcome cont
   assert.doesNotMatch(app, /fallbackContests/);
   assert.doesNotMatch(app, /Demo wallet connected/);
   assert.match(app, /Open private finished work/);
+  assert.match(app, /recordEligibility/);
+  assert.match(app, /Review objective eligibility/);
+  assert.match(app, /awaiting oracle review/);
+  assert.doesNotMatch(app, /source:"AI"/);
   assert.match(app, /Select this outcome/);
   assert.match(app, /Outcome unlocked/);
   assert.match(app, /Commercial rights transferred/);
@@ -69,7 +73,7 @@ test("live marketplace avoids placeholder contests and exposes real outcome cont
   assert.match(app, /Added to participation pool/);
   assert.match(app, /slotFees/);
   assert.match(app, /SHA-256/);
-  assert.match(app, /AI checks eligibility—not taste/);
+  assert.match(app, /Preflight checks mechanics—not taste/);
   assert.match(app, /NEEDS FIX/);
   assert.match(app, /MP4 or WebM/);
   assert.match(app, /Video duration/);
@@ -147,10 +151,10 @@ test("production writes require wallet sessions and finalized chain receipts", a
   assert.doesNotMatch(source, /demo:anonymous/);
 });
 
-test("demo wallet and evaluator credentials are validated before data access", async () => {
-  const [{ authenticatedWallet }, { default: worker }] = await Promise.all([
+test("demo wallets are validated and eligibility requires the configured oracle", async () => {
+  const [{ authenticatedWallet }, source] = await Promise.all([
     import(new URL("../worker/auth.js", import.meta.url)),
-    import(new URL("../worker/index.js", import.meta.url))
+    readFile(new URL("../worker/index.js", import.meta.url), "utf8")
   ]);
   const invalidWallet = await authenticatedWallet(new Request("https://kotae.test/api/contests", {
     method: "POST",
@@ -159,10 +163,7 @@ test("demo wallet and evaluator credentials are validated before data access", a
   }), { KOTAE_AUTH_MODE: "demo" }, {});
   assert.equal(invalidWallet.status, 401);
 
-  const unconfiguredEvaluator = await worker.fetch(new Request("https://kotae.test/api/submissions/sub_1/eligibility", {
-    method: "PATCH",
-    headers: { "content-type": "application/json", "x-kotae-worker-secret": "configured" },
-    body: JSON.stringify({ status: "VALID" })
-  }), {});
-  assert.equal(unconfiguredEvaluator.status, 503);
+  assert.match(source, /Eligibility oracle is not configured/);
+  assert.match(source, /Only the configured eligibility oracle can record a decision/);
+  assert.match(source, /actor: oracle, eventName: "EligibilityRecorded"/);
 });

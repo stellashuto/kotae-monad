@@ -55,20 +55,6 @@ function embeddedStaticResponse(request) {
   });
 }
 
-function secretsMatch(actual, expected) {
-  if (!actual || !expected || actual.length !== expected.length) return false;
-  let mismatch = 0;
-  for (let index = 0; index < actual.length; index += 1) mismatch |= actual.charCodeAt(index) ^ expected.charCodeAt(index);
-  return mismatch === 0;
-}
-
-function authorizeEvaluator(request, env) {
-  const expected = env.KOTAE_EVALUATOR_SECRET;
-  if (typeof expected !== "string" || expected.length < 32) return json({ error: "Evaluator authentication is not configured" }, 503);
-  if (!secretsMatch(request.headers.get("x-kotae-worker-secret"), expected)) return json({ error: "Unauthorized evaluator" }, 401);
-  return null;
-}
-
 async function verifiedChainTransaction(env, options) {
   try {
     return await verifyEscrowTransaction(env, options);
@@ -227,16 +213,19 @@ async function submitWork(request, env, contestId) {
 }
 
 async function eligibility(request, env, submissionId) {
-  const authError = authorizeEvaluator(request, env);
-  if (authError) return authError;
-  const body = await request.json().catch(() => ({})), status = body.status === "VALID" ? "VALID" : "NEEDS_FIX";
   const database = await db(env);
+  const oracle = await walletForWrite(request, env, database);
+  if (oracle instanceof Response) return oracle;
+  const configuredOracle = String(env.ELIGIBILITY_ORACLE || env.KOTAE_ELIGIBILITY_ORACLE || "").toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(configuredOracle)) return json({ error: "Eligibility oracle is not configured" }, 503);
+  if (oracle !== configuredOracle) return json({ error: "Only the configured eligibility oracle can record a decision" }, 403);
+  const body = await request.json().catch(() => ({})), status = body.status === "VALID" ? "VALID" : "NEEDS_FIX";
   const submission = await database.prepare(`SELECT contest_id,chain_submission_id FROM submissions WHERE id=?`).bind(submissionId).first();
   if (!submission?.chain_submission_id) return json({ error: "Submission not found" }, 404);
   const contest = await database.prepare(`SELECT chain_contest_id FROM contests WHERE id=?`).bind(submission.contest_id).first();
   const reused = await rejectReusedTransaction(database, body.txHash);
   if (reused) return reused;
-  const verified = await verifiedChainTransaction(env, { txHash: String(body.txHash || ""), eventName: "EligibilityRecorded" });
+  const verified = await verifiedChainTransaction(env, { txHash: String(body.txHash || ""), actor: oracle, eventName: "EligibilityRecorded" });
   if (verified instanceof Response) return verified;
   const expectedEligibility = status === "VALID" ? 1n : 2n;
   const reasonHash = eligibilityReasonHash(body);
@@ -246,10 +235,10 @@ async function eligibility(request, env, submissionId) {
     asBigInt(verified.args.eligibility) !== expectedEligibility ||
     !sameHex(verified.args.reasonHash, reasonHash)
   ) return json({ error: "Onchain eligibility result does not match the evaluator payload" }, 422);
-  const now = new Date().toISOString(), actor = verified.transaction.from.toLowerCase();
+  const now = new Date().toISOString();
   await database.batch([
     database.prepare(`UPDATE submissions SET eligibility=?,reason_codes_json=?,ai_message=? WHERE id=?`).bind(status,JSON.stringify(body.reasonCodes||[]),body.message||null,submissionId),
-    chainRecord(database,verified,actor,"ELIGIBILITY_RECORDED",submission.contest_id,now),
+    chainRecord(database,verified,oracle,"ELIGIBILITY_RECORDED",submission.contest_id,now),
   ]);
   return json({ submissionId, eligibility: status, txHash: verified.txHash });
 }
@@ -374,7 +363,8 @@ export default { async fetch(request, env) {
     escrowAddress: env.KOTAE_ESCROW_ADDRESS || null,
     ausdAddress: env.AUSD_ADDRESS || null,
     ausdFaucetAddress: env.AUSD_FAUCET_ADDRESS || "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C",
-    evaluatorConfigured: typeof env.KOTAE_EVALUATOR_SECRET === "string" && env.KOTAE_EVALUATOR_SECRET.length >= 32,
+    eligibilityOracle: env.ELIGIBILITY_ORACLE || env.KOTAE_ELIGIBILITY_ORACLE || null,
+    eligibilityOracleConfigured: /^0x[0-9a-fA-F]{40}$/.test(String(env.ELIGIBILITY_ORACLE || env.KOTAE_ELIGIBILITY_ORACLE || "")),
   });
   if (url.pathname === "/api/auth/challenge" && request.method === "POST") return createWalletChallenge(request,await db(env));
   if (url.pathname === "/api/auth/verify" && request.method === "POST") return verifyWalletChallenge(request,await db(env));
