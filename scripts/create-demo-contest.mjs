@@ -17,7 +17,7 @@ const transport = http(config.rpcUrl);
 const publicClient = createPublicClient({ chain, transport });
 const requesterClient = createWalletClient({ account: requester, chain, transport });
 const funderClient = createWalletClient({ account: funder, chain, transport });
-const baseUrl = "https://outcome-ausd-spark.shuto-kajita.chatgpt.site";
+const baseUrl = "https://kotae-monad-spark.vercel.app";
 const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)", "function approve(address,uint256) returns (bool)", "function transfer(address,uint256) returns (bool)"]);
 const escrowAbi = parseAbi(["function createContest(uint8 assetType, uint128 baseBudget, uint40 submissionDeadline, uint16 validCap, bytes32 briefHash) returns (uint256 contestId)"]);
 

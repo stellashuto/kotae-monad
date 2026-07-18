@@ -15,7 +15,7 @@ When I need a small poster, landing page, short video, or micro-tool, I either p
 KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Deterministic preflight verifies file mechanics, and a separately controlled Oracle records objective brief compliance onchain; the requester alone chooses the winner. Finalized Monad receipts are verified before the app records any state change, and the escrow settles every AUSD with fixed rules.
 
 **Project URL**
-https://outcome-ausd-spark.shuto-kajita.chatgpt.site
+https://kotae-monad-spark.vercel.app
 
 **GitHub repo**
 https://github.com/stellashuto/kotae-monad
@@ -27,7 +27,7 @@ Testnet
 `0x7A8806bfB0292D71081445C48595fDc45Dac46cC`
 
 **Demo video**
-https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo-v15.mp4
+https://kotae-monad-spark.vercel.app/kotae-demo-v18.mp4
 
 ## Add before submitting
 

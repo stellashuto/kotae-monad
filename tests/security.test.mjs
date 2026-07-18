@@ -108,7 +108,7 @@ test("wallet challenge preserves the public Vercel origin through the trusted pr
   const database = new AuthDatabase();
   const publicOrigin = "https://kotae-monad-spark.vercel.app";
   const proxySecret = "test-proxy-secret";
-  const response = await createWalletChallenge(new Request("https://outcome-ausd-spark.shuto-kajita.chatgpt.site/api/auth/challenge", {
+  const response = await createWalletChallenge(new Request("https://backend.kotae.test/api/auth/challenge", {
     method: "POST",
     headers: {
       "content-type": "application/json",

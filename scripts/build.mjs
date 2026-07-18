@@ -29,7 +29,7 @@ const embeddedStaticAssets = {
   "/styles.css": { body: stylesCss, contentType: "text/css; charset=utf-8" },
   "/app.js": { body: appJs, contentType: "text/javascript; charset=utf-8" },
   "/og.png": { body: ogPng.toString("base64"), contentType: "image/png", encoding: "base64" },
-  "/kotae-demo-v15.mp4": { body: demoVideo.toString("base64"), contentType: "video/mp4", encoding: "base64", range: true },
+  "/kotae-demo-v18.mp4": { body: demoVideo.toString("base64"), contentType: "video/mp4", encoding: "base64", range: true },
 };
 await build({
   entryPoints: [resolve(root, "worker", "index.js")],

@@ -12,9 +12,9 @@ KOTAE flips that workflow:
 - the requester chooses the winner
 - the contract settles 85% / 5% / 10%
 
-Live app: https://outcome-ausd-spark.shuto-kajita.chatgpt.site
+Live app: https://kotae-monad-spark.vercel.app
 
-Demo: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo-v15.mp4
+Demo: https://kotae-monad-spark.vercel.app/kotae-demo-v18.mp4
 
 GitHub: https://github.com/stellashuto/kotae-monad
 

@@ -12,5 +12,5 @@ await mkdir(output, { recursive: true });
 for (const file of ["index.html", "styles.css", "app.js", "og.png"]) {
   await copyFile(resolve(source, file), resolve(output, file));
 }
-await copyFile(resolve(source, "kotae-demo.mp4"), resolve(output, "kotae-demo-v15.mp4"));
+await copyFile(resolve(source, "kotae-demo.mp4"), resolve(output, "kotae-demo-v18.mp4"));
 console.log("KOTAE Vercel frontend built to vercel-dist/");

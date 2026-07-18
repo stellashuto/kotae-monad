@@ -15,7 +15,7 @@ import {
 import { recordObjectiveEligibility } from "./oracle.js";
 
 const embeddedStaticAssets = globalThis.__KOTAE_STATIC_ASSETS__;
-const CURRENT_SITE_VERSION = "16";
+const CURRENT_SITE_VERSION = "18";
 const initializedBindings = new WeakSet();
 async function db(env) {
   if (!env.DB) throw new Error("D1 binding DB is required");

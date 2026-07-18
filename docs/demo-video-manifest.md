@@ -7,10 +7,10 @@
 - Video: H.264 Main Profile, 640x360, 25 fps
 - Audio: AAC, generated locally from the approved English narration
 - Duration: 1 minute 35.05 seconds
-- File size: 1,218,278 bytes
-- SHA-256: `40B24E64CA6F9FC7E9D7577ED6BF489A94D1E8B6CAA370D5A87090E07A182AB2`
+- File size: 1,222,612 bytes
+- SHA-256: `55F109CD08ED2D51345C16A8B8188EFFA6ED2053D186FBC4A7F1F211795CA9BB`
 - Maximum length: 3 minutes
-- Public URL: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo-v15.mp4
+- Public URL: https://kotae-monad-spark.vercel.app/kotae-demo-v18.mp4
 
 ## Exact facts shown
 

@@ -2,7 +2,7 @@
 
 Target length: **about 90 seconds**. The rendered video is hosted publicly at:
 
-https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo-v15.mp4
+https://kotae-monad-spark.vercel.app/kotae-demo-v18.mp4
 
 ## 0:00-0:14 - The problem
 
@@ -30,7 +30,7 @@ https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo-v15.mp4
 
 ## Recording facts
 
-- Live app: https://outcome-ausd-spark.shuto-kajita.chatgpt.site
+- Live app: https://kotae-monad-spark.vercel.app
 - Contract: `0x7A8806bfB0292D71081445C48595fDc45Dac46cC`
 - Live demo: `1 VALID / 1 submitted`
 - Requester, Creator, and eligibility Oracle are three distinct Testnet wallets.
