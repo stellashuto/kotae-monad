@@ -48,7 +48,9 @@ KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on
 5. See the contest appear from the live API with its onchain contest ID.
 6. From a creator wallet, submit a finished file and its bond.
 7. The independent server Oracle automatically records objective file eligibility onchain.
-8. From the requester wallet, review valid outcomes and choose the winner.
+8. Confirm that winner selection remains locked until the deadline or valid-entry cap; when judging opens, only the requester wallet can choose the winner.
+
+The Vercel-hosted web app accepts files up to 4 MB so uploads stay below the hosting proxy's request limit. Larger production assets should use a future direct-to-private-storage upload flow.
 
 ## Architecture
 

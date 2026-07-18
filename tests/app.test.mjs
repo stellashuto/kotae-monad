@@ -7,7 +7,7 @@ test("product copy and critical transaction affordances render", async () => {
   for (const phrase of ["KOTAE", "Buy the answer", "Not the attempts", "Explore live contests", "Short Video", "Fund & open contest", "Submit finished work", "Valid runners-up", "Monad Testnet"]) assert.match(html, new RegExp(phrase));
   assert.match(html, /<video[\s\S]*poster="\/og\.png"[\s\S]*aria-label="KOTAE product demo video"/);
   assert.match(html, /POST-HACKATHON ROADMAP/);
-  assert.match(html, /app\.js\?v=18/);
+  assert.match(html, /app\.js\?v=19/);
   assert.match(html, /<video controls preload="metadata" playsinline/);
   assert.match(html, /<source src="\/kotae-demo-v18\.mp4" type="video\/mp4"/);
   assert.match(html, /Creators sell what/);
@@ -22,7 +22,7 @@ test("production worker embeds the static site when an asset binding is unavaila
   assert.match(worker, /embeddedStaticResponse\(request\)/);
   assert.match(worker, /globalThis\.__KOTAE_STATIC_ASSETS__/);
   assert.match(worker, /"cache-control": "no-cache"/);
-  assert.match(worker, /CURRENT_SITE_VERSION = "18"/);
+  assert.match(worker, /CURRENT_SITE_VERSION = "19"/);
   assert.match(worker, /"accept-ranges": "bytes"/);
   assert.match(worker, /"content-range"/);
   assert.match(worker, /status: 206/);
@@ -94,6 +94,29 @@ test("live marketplace avoids placeholder contests and exposes real outcome cont
   assert.match(css, /\.entry-proof/);
   assert.match(css, /\.private-file-link/);
   assert.match(css, /\.receipt-modal/);
+});
+
+test("public UI enforces hosting-safe uploads and contract-aligned contest phases", async () => {
+  const [app, html, css, vercel, submissionCopy] = await Promise.all([
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../vercel.json", import.meta.url), "utf8"),
+    readFile(new URL("../docs/spark-submission.md", import.meta.url), "utf8"),
+  ]);
+  assert.match(app, /PUBLIC_UPLOAD_MAX_BYTES = 4_000_000/);
+  assert.match(app, /submissionOpen: isOpen && !deadlineReached && !capReached/);
+  assert.match(app, /judgingOpen: isOpen && \(deadlineReached \|\| capReached\)/);
+  assert.match(app, /Available when judging opens/);
+  assert.match(app, /startsWith\("contest\/"\)/);
+  assert.match(app, /data-private-file/);
+  assert.match(html, /id="mobileNavToggle"/);
+  assert.match(html, /id="mobileNav"/);
+  assert.match(css, /\.mobile-nav-toggle/);
+  assert.match(css, /:focus-visible/);
+  assert.match(vercel, /Content-Security-Policy/);
+  assert.match(vercel, /X-Content-Type-Options/);
+  assert.doesNotMatch(submissionCopy, /objective brief compliance/i);
 });
 
 test("cancellation API enforces requester and zero-submission rules", async () => {

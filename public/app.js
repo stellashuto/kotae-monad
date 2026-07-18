@@ -12,6 +12,7 @@ const ESCROW_ABI = parseAbi([
   "function settleAfterTimeout(uint256 contestId)",
 ]);
 const ASSET_TYPE = { "Photo / Visual": 0, "Static Page": 1, "Micro Tool": 2, "Short Video": 3 };
+const PUBLIC_UPLOAD_MAX_BYTES = 4_000_000;
 
 const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", chain: { configured: false, deploymentReady: false, ausdAddress: null, ausdFaucetAddress: null, escrowAddress: null, platformRecipient: null, eligibilityOracle: null }, currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
 const views = [...document.querySelectorAll("[data-view]")];
@@ -26,6 +27,39 @@ function notify(message) {
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[char]);
+}
+
+function contestTiming(contest, now = Date.now()) {
+  const deadlineAt = Date.parse(contest.deadline);
+  const hasDeadline = Number.isFinite(deadlineAt);
+  const capReached = Number(contest.cap) > 0 && Number(contest.validCount) >= Number(contest.cap);
+  const deadlineReached = hasDeadline && now >= deadlineAt;
+  const isOpen = contest.status === "OPEN";
+  return {
+    deadlineAt,
+    hasDeadline,
+    timeoutReady: contest.status === "JUDGING_EXPIRED",
+    submissionOpen: isOpen && !deadlineReached && !capReached,
+    judgingOpen: isOpen && (deadlineReached || capReached),
+  };
+}
+
+function formatDeadline(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Deadline unavailable";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function formatRemaining(value) {
+  const deadline = Date.parse(value);
+  if (!Number.isFinite(deadline)) return "--";
+  const remaining = Math.max(0, deadline - Date.now());
+  if (remaining === 0) return "CLOSED";
+  const totalMinutes = Math.ceil(remaining / 60_000);
+  const days = Math.floor(totalMinutes / 1_440);
+  const hours = Math.floor((totalMinutes % 1_440) / 60);
+  const minutes = totalMinutes % 60;
+  return days > 0 ? `${days}D ${String(hours).padStart(2, "0")}H` : `${hours}H ${String(minutes).padStart(2, "0")}M`;
 }
 
 function requireOnchainConfiguration() {
@@ -123,13 +157,15 @@ async function deployKotaeEscrow() {
 }
 
 function contestRow(contest) {
-  const timeoutReady = contest.status === "JUDGING_EXPIRED";
+  const timing = contestTiming(contest);
+  const timeValue = timing.timeoutReady ? "READY" : timing.judgingOpen ? "OPEN" : formatRemaining(contest.deadline);
+  const timeLabel = timing.timeoutReady ? "TIMEOUT SETTLEMENT" : timing.judgingOpen ? "WINNER SELECTION" : "REMAINING";
   return `<article class="contest-row" data-contest-id="${escapeHtml(contest.id)}" tabindex="0" role="button" aria-label="Open ${escapeHtml(contest.title)}">
     <div class="type">${escapeHtml(contest.type)}</div>
     <h3>${escapeHtml(contest.title)}</h3>
     <p>${escapeHtml(contest.brief)}</p>
     <div class="valid"><strong>${contest.validCount}/${contest.cap}</strong><small>VALID ENTRIES</small></div>
-    <div class="time ${timeoutReady ? "timeout-ready" : ""}"><strong>${timeoutReady ? "READY" : escapeHtml(contest.deadline)}</strong><small>${timeoutReady ? "TIMEOUT SETTLEMENT" : "REMAINING"}</small></div>
+    <div class="time ${timing.timeoutReady ? "timeout-ready" : ""}"><strong>${timeValue}</strong><small>${timeLabel}</small></div>
     <span class="arrow">↗</span>
   </article>`;
 }
@@ -167,7 +203,8 @@ function bindContestRows() {
 function navigate(route) {
   const target = ["home","browse","create","contest","dashboard"].includes(route) ? route : "home";
   views.forEach(view => view.classList.toggle("active", view.dataset.view === target));
-  history.replaceState(null, "", `#${target}`);
+  const hash = target === "contest" && state.currentContest ? `#contest/${encodeURIComponent(state.currentContest.id)}` : `#${target}`;
+  history.replaceState(null, "", hash);
   window.scrollTo({ top: 0, behavior: "smooth" });
   document.querySelector("main").focus({ preventScroll: true });
 }
@@ -176,12 +213,53 @@ document.querySelectorAll("[data-route]").forEach(link => link.addEventListener(
   event.preventDefault(); navigate(link.dataset.route);
 }));
 
-function entryCard(number, status = "VALID", theme = "", canSelect = true, record = {}) {
+document.querySelectorAll("[data-section]").forEach(link => link.addEventListener("click", event => {
+  event.preventDefault();
+  navigate("home");
+  requestAnimationFrame(() => document.querySelector(`#${link.dataset.section}`)?.scrollIntoView({ behavior: "smooth" }));
+}));
+
+const mobileNavToggle = document.querySelector("#mobileNavToggle");
+const mobileNav = document.querySelector("#mobileNav");
+function closeMobileNav() {
+  if (!mobileNav || !mobileNavToggle) return;
+  mobileNav.hidden = true;
+  mobileNavToggle.setAttribute("aria-expanded", "false");
+}
+mobileNavToggle?.addEventListener("click", () => {
+  const opening = mobileNav.hidden;
+  mobileNav.hidden = !opening;
+  mobileNavToggle.setAttribute("aria-expanded", String(opening));
+});
+mobileNav?.querySelectorAll("a").forEach(link => link.addEventListener("click", closeMobileNav));
+document.addEventListener("keydown", event => { if (event.key === "Escape") closeMobileNav(); });
+
+function entryCard(number, status = "VALID", theme = "", canSelect = true, record = {}, selectionLabel = "Available when judging opens") {
   const creator = record.creator ? `${record.creator.slice(0,6)}…${record.creator.slice(-4)}` : `Creator ${number}`;
   const chainSubmission = record.chainSubmissionId ? `#${record.chainSubmissionId}` : "Pending onchain ID";
-  const privateFile = record.id ? `<a class="private-file-link" href="/api/submissions/${encodeURIComponent(record.id)}/file" target="_blank" rel="noreferrer">Open private finished work ↗</a>` : "";
+  const privateFile = record.id ? `<button class="private-file-link" type="button" data-private-file="/api/submissions/${encodeURIComponent(record.id)}/file">Open private finished work ↗</button>` : "";
   const objectiveNote = status === "CHECKING" ? `<small class="oracle-status">Independent Oracle is finalizing objective file checks.</small>` : "";
-  return `<article class="entry-card"><div class="entry-proof"><span>ONCHAIN ENTRY</span><strong>${escapeHtml(chainSubmission)}</strong><small>${escapeHtml(creator)}</small></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(creator)}</strong><span>Original stored privately · Access is wallet-gated</span></p>${privateFile}${objectiveNote}<button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${canSelect ? "Select this outcome" : "Judging window expired"}</button></article>`;
+  const actionLabel = status !== "VALID" ? "Eligibility pending" : canSelect ? "Select this outcome" : selectionLabel;
+  return `<article class="entry-card"><div class="entry-proof"><span>ONCHAIN ENTRY</span><strong>${escapeHtml(chainSubmission)}</strong><small>${escapeHtml(creator)}</small></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(creator)}</strong><span>Original stored privately · Access is wallet-gated</span></p>${privateFile}${objectiveNote}<button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${escapeHtml(actionLabel)}</button></article>`;
+}
+
+async function openPrivateFinishedWork(url) {
+  if (state.authMode === "signature" && !state.wallet) return notify("Connect and verify your wallet before opening private finished work.");
+  const previewWindow = window.open("about:blank", "_blank");
+  if (!previewWindow) return notify("Allow pop-ups to open the private finished work.");
+  previewWindow.opener = null;
+  try {
+    const response = await fetch(url, { credentials: "same-origin" });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      previewWindow.close();
+      return notify(result.error || "Private finished work could not be opened.");
+    }
+    previewWindow.location.replace(url);
+  } catch {
+    previewWindow.close();
+    notify("Private finished work could not be opened.");
+  }
 }
 
 async function openContest(id) {
@@ -208,19 +286,20 @@ async function openContest(id) {
     }
   }
   const percent = Math.min(100, Math.round((contest.validCount / contest.cap) * 100));
-  const isOpen = contest.status === "OPEN";
-  const timeoutReady = contest.status === "JUDGING_EXPIRED";
+  const timing = contestTiming(contest);
+  const requesterConnected = state.authMode === "demo" || Boolean(state.wallet && state.wallet.toLowerCase() === contest.requester.toLowerCase());
+  const selectionLabel = timing.timeoutReady ? "Judging window expired" : !timing.judgingOpen ? "Available when judging opens" : !state.wallet && state.authMode === "signature" ? "Connect requester wallet to choose" : !requesterConnected ? "Requester chooses the winner" : "Select this outcome";
   const entryRecords = Array.isArray(contest.entries) ? contest.entries : [];
-  const entries = entryRecords.map((entry,i) => entryCard(i+1, entry.eligibility, "", isOpen && (state.authMode === "demo" || Boolean(entry.id && entry.chainSubmissionId)), entry)).join("") || `<p>No finished work has been recorded yet.</p>`;
+  const entries = entryRecords.map((entry,i) => entryCard(i+1, entry.eligibility, "", timing.judgingOpen && requesterConnected && (state.authMode === "demo" || Boolean(entry.id && entry.chainSubmissionId)), entry, selectionLabel)).join("") || `<p>No finished work has been recorded yet.</p>`;
   const cancelAction = contest.status === "OPEN" && contest.submissions === 0 ? `<button class="cancel-contest" id="cancelContest">Cancel & refund before first submission</button>` : "";
   const creatorVersion = state.creatorVersions[contest.id] || 0;
   const submitLabel = creatorVersion === 0 ? "Submit finished work ↗" : creatorVersion < 3 ? `Replace your submission · ${3 - creatorVersion} left` : "Replacement limit reached";
   const slotPacks = contest.slotPacks || 0;
-  const slotAction = contest.status === "OPEN" && slotPacks < 3 ? `<button class="slot-pack-button" id="addSlotPack">Add 5 valid slots · ${(contest.budget * .10).toFixed(2)} AUSD</button>` : "";
-  const submissionAction = isOpen ? `<button class="submit-button" id="submitEntry" ${creatorVersion >= 3 ? "disabled" : ""}>${submitLabel}</button>` : timeoutReady ? `<button class="timeout-button" id="settleTimeout">Settle after requester timeout</button>` : "";
+  const slotAction = timing.submissionOpen && slotPacks < 3 ? `<button class="slot-pack-button" id="addSlotPack">Add 5 valid slots · ${(contest.budget * .10).toFixed(2)} AUSD</button>` : "";
+  const submissionAction = timing.submissionOpen ? `<button class="submit-button" id="submitEntry" ${creatorVersion >= 3 ? "disabled" : ""}>${submitLabel}</button>` : timing.timeoutReady ? `<button class="timeout-button" id="settleTimeout">Settle after requester timeout</button>` : timing.judgingOpen ? `<p class="phase-notice">Submissions are closed. The requester can now choose a valid outcome.</p>` : "";
   document.querySelector("#contestDetail").innerHTML = `<div class="detail-shell">
     <div class="detail-head">
-      <div><button class="back-link" data-back>← Back to open briefs</button><div class="eyebrow"><span>LIVE</span> ${escapeHtml(contest.type)}</div><h1>${escapeHtml(contest.title)}</h1><p class="brief">${escapeHtml(contest.brief)}</p><div class="detail-meta"><span>REQUESTER<b>${escapeHtml(contest.requester)}</b></span><span>DEADLINE<b>${escapeHtml(contest.deadline)}</b></span><span>ONCHAIN SUBMISSIONS<b>${contest.submissions}</b></span></div></div>
+      <div><button class="back-link" data-back>← Back to open briefs</button><div class="eyebrow"><span>LIVE</span> ${escapeHtml(contest.type)}</div><h1>${escapeHtml(contest.title)}</h1><p class="brief">${escapeHtml(contest.brief)}</p><div class="detail-meta"><span>REQUESTER<b>${escapeHtml(contest.requester)}</b></span><span>DEADLINE<b><time datetime="${escapeHtml(contest.deadline)}">${escapeHtml(formatDeadline(contest.deadline))}</time></b></span><span>ONCHAIN SUBMISSIONS<b>${contest.submissions}</b></span></div></div>
       <aside class="prize-box"><span>BASE PRIZE LOCKED</span><strong>${contest.budget.toFixed(2)}</strong><small>AUSD · MONAD TESTNET</small><div class="capacity"><div><i style="width:${percent}%"></i></div><p><span>${contest.validCount} VALID</span><span>${contest.cap} MAX</span></p></div>${submissionAction}${slotAction}${cancelAction}</aside>
     </div>
     <div class="detail-body"><section class="rules"><div class="section-kicker">THE BRIEF</div><div class="rule-group"><h2>Acceptance rules</h2><h3>Must include</h3><ul>${(contest.must || []).map(rule=>`<li>${escapeHtml(rule)}</li>`).join("")}</ul></div><div class="rule-group"><h3>Avoid</h3><ul>${(contest.avoid || []).map(rule=>`<li>${escapeHtml(rule)}</li>`).join("")}</ul></div><div class="rule-group"><h3>License</h3><ul><li>Commercial rights transfer to requester only for the selected work</li><li>Losing creators keep full rights to their work</li></ul></div></section>
@@ -231,6 +310,7 @@ async function openContest(id) {
   document.querySelector("#settleTimeout")?.addEventListener("click", () => requestTimeoutSettlement(contest));
   document.querySelector("#addSlotPack")?.addEventListener("click", () => requestSlotPack(contest));
   document.querySelector("#cancelContest")?.addEventListener("click", () => requestContestCancellation(contest));
+  document.querySelectorAll("[data-private-file]").forEach(button => button.addEventListener("click", () => openPrivateFinishedWork(button.dataset.privateFile)));
   document.querySelectorAll(".select-winner").forEach(button => button.onclick = () => settleContest(contest, button.dataset.entry, button.dataset.submission, button.dataset.chainSubmission));
   navigate("contest");
 }
@@ -269,7 +349,7 @@ async function reviewSubmission(file, contest, hash) {
   const zipType = ["application/zip","application/x-zip-compressed"].includes(file.type) || name.endsWith(".zip");
   const videoType = ["video/mp4","video/webm"].includes(file.type) || /\.(mp4|webm)$/.test(name);
   const formatPass = contest.type === "Photo / Visual" ? imageType : contest.type === "Short Video" ? videoType : zipType;
-  const maxSize = contest.type === "Short Video" ? 50_000_000 : contest.type === "Photo / Visual" ? 20_000_000 : 10_000_000;
+  const maxSize = PUBLIC_UPLOAD_MAX_BYTES;
   const duration = contest.type === "Short Video" && videoType ? await readVideoDuration(file) : null;
   const duplicate = Object.values(state.submissionHashes).flat().includes(hash);
   const checks = [
@@ -293,7 +373,7 @@ function showEligibilityReport(contest, file, review, version, replacing, record
 function showSubmitDialog() {
   const contest = state.currentContest;
   const bonds = {"Photo / Visual":0.5,"Short Video":1,"Static Page":1,"Micro Tool":2};
-  const requirements = contest.type === "Photo / Visual" ? "PNG, JPEG or WebP · max 20MB" : contest.type === "Short Video" ? "MP4 or WebM · max 50MB · up to 30 seconds" : "ZIP with index.html · max 10MB, plus desktop and mobile screenshots";
+  const requirements = contest.type === "Photo / Visual" ? "PNG, JPEG or WebP · max 4MB" : contest.type === "Short Video" ? "MP4 or WebM · max 4MB · up to 30 seconds" : "ZIP with index.html · max 4MB, plus desktop and mobile screenshots";
   const currentVersion = state.creatorVersions[contest.id] || 0;
   if (currentVersion >= 3) return notify("Replacement limit reached: the initial submission and two updates are already recorded.");
   const replacing = currentVersion > 0;
@@ -605,12 +685,15 @@ async function boot() {
   try { const response=await fetch("/api/contests"); if(!response.ok) throw new Error(); state.contests=(await response.json()).contests; }
   catch { state.contests=[]; notify("Live contest data is temporarily unavailable."); }
   renderContests();
-  const route=location.hash.replace("#",""); navigate(["browse","create","dashboard"].includes(route)?route:"home");
+  const route = location.hash.replace("#", "");
+  if (route.startsWith("contest/")) await openContest(decodeURIComponent(route.slice("contest/".length)));
+  else navigate(["browse","create","dashboard"].includes(route) ? route : "home");
 }
 
 window.addEventListener("hashchange", () => {
   const route = location.hash.replace("#", "");
-  if (["home", "browse", "create", "dashboard"].includes(route)) navigate(route);
+  if (route.startsWith("contest/")) openContest(decodeURIComponent(route.slice("contest/".length)));
+  else if (["home", "browse", "create", "dashboard"].includes(route)) navigate(route);
 });
 
 boot();
