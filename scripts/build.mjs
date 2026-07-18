@@ -1,4 +1,4 @@
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
 
@@ -17,6 +17,18 @@ await build({
   target: "es2022",
   logLevel: "warning",
 });
+const [indexHtml, stylesCss, appJs, ogPng] = await Promise.all([
+  readFile(resolve(root, "public", "index.html"), "utf8"),
+  readFile(resolve(root, "public", "styles.css"), "utf8"),
+  readFile(resolve(dist, "app.js"), "utf8"),
+  readFile(resolve(root, "public", "og.png")),
+]);
+const embeddedStaticAssets = {
+  "/index.html": { body: indexHtml, contentType: "text/html; charset=utf-8" },
+  "/styles.css": { body: stylesCss, contentType: "text/css; charset=utf-8" },
+  "/app.js": { body: appJs, contentType: "text/javascript; charset=utf-8" },
+  "/og.png": { body: ogPng.toString("base64"), contentType: "image/png", encoding: "base64" },
+};
 await build({
   entryPoints: [resolve(root, "worker", "index.js")],
   outfile: resolve(dist, "server", "index.js"),
@@ -25,6 +37,9 @@ await build({
   platform: "browser",
   target: "es2022",
   conditions: ["worker", "browser"],
+  define: {
+    "globalThis.__KOTAE_STATIC_ASSETS__": JSON.stringify(embeddedStaticAssets),
+  },
   logLevel: "warning",
 });
 console.log("KOTAE built to dist/");

@@ -11,6 +11,17 @@ test("product copy and critical transaction affordances render", async () => {
   assert.match(html, /fixed AUSD price/);
 });
 
+test("production worker embeds the static site when an asset binding is unavailable", async () => {
+  const [worker, buildScript] = await Promise.all([
+    readFile(new URL("../worker/index.js", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/build.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(worker, /embeddedStaticResponse\(request\)/);
+  assert.match(worker, /globalThis\.__KOTAE_STATIC_ASSETS__/);
+  assert.match(buildScript, /embeddedStaticAssets/);
+  assert.match(buildScript, /"globalThis\.__KOTAE_STATIC_ASSETS__"/);
+});
+
 test("browser client targets Monad testnet and receives deployed addresses from runtime config", async () => {
   const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
   assert.match(app, /0x279f/);

@@ -14,6 +14,7 @@ import {
   verifyEscrowTransaction,
 } from "./chain.js";
 
+const embeddedStaticAssets = globalThis.__KOTAE_STATIC_ASSETS__;
 const initializedBindings = new WeakSet();
 async function db(env) {
   if (!env.DB) throw new Error("D1 binding DB is required");
@@ -31,6 +32,28 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 const makeId = (prefix) => `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`;
 const asBigInt = (value) => BigInt(value);
 const sameHex = (left, right) => String(left || "").toLowerCase() === String(right || "").toLowerCase();
+
+function decodeBase64(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function embeddedStaticResponse(request) {
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  const url = new URL(request.url);
+  const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
+  const asset = embeddedStaticAssets?.[pathname];
+  if (!asset) return null;
+  const body = request.method === "HEAD" ? null : asset.encoding === "base64" ? decodeBase64(asset.body) : asset.body;
+  return new Response(body, {
+    headers: {
+      "content-type": asset.contentType,
+      "cache-control": pathname === "/index.html" ? "no-cache" : "public, max-age=86400",
+    },
+  });
+}
 
 function secretsMatch(actual, expected) {
   if (!actual || !expected || actual.length !== expected.length) return false;
@@ -352,5 +375,7 @@ export default { async fetch(request, env) {
   if (match && request.method === "POST") return addSlotPack(request,env,match[1]);
   match = url.pathname.match(/^\/api\/contests\/([^/]+)\/timeout-settle$/);
   if (match && request.method === "POST") return settleAfterTimeout(request,env,match[1]);
+  const embedded = embeddedStaticResponse(request);
+  if (embedded) return embedded;
   return env.ASSETS ? env.ASSETS.fetch(request) : new Response("Not found",{status:404});
 }};
