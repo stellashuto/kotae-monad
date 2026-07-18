@@ -50,7 +50,7 @@ function embeddedStaticResponse(request) {
   return new Response(body, {
     headers: {
       "content-type": asset.contentType,
-      "cache-control": pathname === "/index.html" ? "no-cache" : "public, max-age=86400",
+      "cache-control": "no-cache",
     },
   });
 }

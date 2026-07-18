@@ -18,6 +18,7 @@ test("production worker embeds the static site when an asset binding is unavaila
   ]);
   assert.match(worker, /embeddedStaticResponse\(request\)/);
   assert.match(worker, /globalThis\.__KOTAE_STATIC_ASSETS__/);
+  assert.match(worker, /"cache-control": "no-cache"/);
   assert.match(buildScript, /embeddedStaticAssets/);
   assert.match(buildScript, /"globalThis\.__KOTAE_STATIC_ASSETS__"/);
 });
