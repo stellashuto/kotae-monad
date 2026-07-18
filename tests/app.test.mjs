@@ -48,6 +48,7 @@ test("public contest data exposes chain identifiers without private originals", 
   assert.match(worker, /request\.method === "GET"\) return listContestSubmissions/);
   assert.match(worker, /SELECT id,creator,version,eligibility,chain_submission_id,submitted_at FROM submissions/);
   assert.match(worker, /privateSubmissionFile/);
+  assert.match(worker, /authenticatedWallet\(request, env, database, \{ requireOrigin: false \}\)/);
   assert.match(worker, /Private submission access denied/);
   assert.match(worker, /cache-control": "private, no-store"/);
 });

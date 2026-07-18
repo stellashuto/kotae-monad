@@ -121,7 +121,7 @@ async function listContestSubmissions(env, contestId) {
 
 async function privateSubmissionFile(request, env, submissionId) {
   const database = await db(env);
-  const viewer = await authenticatedWallet(request, env, database);
+  const viewer = await authenticatedWallet(request, env, database, { requireOrigin: false });
   if (viewer instanceof Response) return viewer;
   const submission = await database.prepare(`SELECT s.file_key,s.original_name,s.mime_type,s.creator,c.requester FROM submissions s JOIN contests c ON c.id=s.contest_id WHERE s.id=?`).bind(submissionId).first();
   if (!submission) return json({ error: "Submission not found" }, 404);
