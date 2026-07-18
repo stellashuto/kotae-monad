@@ -104,6 +104,25 @@ test("wallet challenge creates a server session once and rejects replay", async 
   assert.equal((await verifyWalletChallenge(verificationRequest(), database)).status, 409);
 });
 
+test("wallet challenge preserves the public Vercel origin through the trusted proxy", async () => {
+  const database = new AuthDatabase();
+  const publicOrigin = "https://kotae-monad-spark.vercel.app";
+  const proxySecret = "test-proxy-secret";
+  const response = await createWalletChallenge(new Request("https://outcome-ausd-spark.shuto-kajita.chatgpt.site/api/auth/challenge", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: publicOrigin,
+      "x-kotae-public-origin": publicOrigin,
+      "x-kotae-proxy-secret": proxySecret,
+    },
+    body: JSON.stringify({ address: testAccount.address }),
+  }), database, { KOTAE_PUBLIC_ORIGIN: publicOrigin, KOTAE_PROXY_SECRET: proxySecret });
+  assert.equal(response.status, 201);
+  const challenge = await response.json();
+  assert.match(challenge.message, /Origin: https:\/\/kotae-monad-spark\.vercel\.app/);
+});
+
 test("contest brief hashing is deterministic and covers outcome requirements", () => {
   const brief = { title: "Launch poster", brief: "Make it vivid", must: ["Square"], avoid: ["Price claims"] };
   assert.equal(contestBriefHash(brief), contestBriefHash({ ...brief }));

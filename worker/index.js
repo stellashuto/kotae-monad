@@ -404,10 +404,10 @@ export default { async fetch(request, env) {
     eligibilityOracleConfigured: /^0x[0-9a-fA-F]{40}$/.test(String(env.ELIGIBILITY_ORACLE || "")) && /^0x[0-9a-fA-F]{64}$/.test(String(env.ELIGIBILITY_ORACLE_PRIVATE_KEY || "")),
     requesterOracleSeparated: Boolean(env.PLATFORM_RECIPIENT && env.ELIGIBILITY_ORACLE && String(env.PLATFORM_RECIPIENT).toLowerCase() !== String(env.ELIGIBILITY_ORACLE).toLowerCase()),
   });
-  if (url.pathname === "/api/auth/challenge" && request.method === "POST") return createWalletChallenge(request,await db(env));
-  if (url.pathname === "/api/auth/verify" && request.method === "POST") return verifyWalletChallenge(request,await db(env));
+  if (url.pathname === "/api/auth/challenge" && request.method === "POST") return createWalletChallenge(request,await db(env),env);
+  if (url.pathname === "/api/auth/verify" && request.method === "POST") return verifyWalletChallenge(request,await db(env),env);
   if (url.pathname === "/api/auth/session" && request.method === "GET") return walletSession(request,env,await db(env));
-  if (url.pathname === "/api/auth/logout" && request.method === "POST") return logoutWallet(request,await db(env));
+  if (url.pathname === "/api/auth/logout" && request.method === "POST") return logoutWallet(request,await db(env),env);
   if (url.pathname === "/api/contests" && request.method === "GET") return listContests(env);
   if (url.pathname === "/api/contests" && request.method === "POST") return createContest(request,env);
   let match = url.pathname.match(/^\/api\/contests\/([^/]+)\/submissions$/);

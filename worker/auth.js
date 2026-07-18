@@ -30,9 +30,18 @@ const cookieValue = (request, name) => {
   return null;
 };
 
-const sameOrigin = (request) => {
+const effectiveOrigin = (request, env = {}) => {
+  const upstreamOrigin = new URL(request.url).origin;
+  const configuredOrigin = String(env.KOTAE_PUBLIC_ORIGIN || "").replace(/\/$/, "");
+  const forwardedOrigin = String(request.headers.get("x-kotae-public-origin") || "").replace(/\/$/, "");
+  const proxySecret = request.headers.get("x-kotae-proxy-secret") || "";
+  if (configuredOrigin && forwardedOrigin === configuredOrigin && proxySecret && proxySecret === env.KOTAE_PROXY_SECRET) return configuredOrigin;
+  return upstreamOrigin;
+};
+
+const sameOrigin = (request, env = {}) => {
   const origin = request.headers.get("origin");
-  return Boolean(origin && origin === new URL(request.url).origin);
+  return Boolean(origin && origin === effectiveOrigin(request, env));
 };
 
 const sessionCookie = (request, token, maxAge = SESSION_TTL_SECONDS) => {
@@ -64,12 +73,12 @@ export async function verifyWalletSignature({ address, message, signature }) {
   }
 }
 
-export async function createWalletChallenge(request, database) {
-  if (!sameOrigin(request)) return json({ error: "Same-origin request required" }, 403);
+export async function createWalletChallenge(request, database, env = {}) {
+  if (!sameOrigin(request, env)) return json({ error: "Same-origin request required" }, 403);
   const body = await request.json().catch(() => ({}));
   if (!isAddress(String(body.address || ""), { strict: false })) return json({ error: "A valid wallet address is required" }, 422);
   const address = getAddress(body.address).toLowerCase();
-  const origin = new URL(request.url).origin;
+  const origin = effectiveOrigin(request, env);
   const now = new Date();
   const expires = new Date(now.getTime() + CHALLENGE_TTL_MS);
   const challengeId = `challenge_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -84,8 +93,8 @@ export async function createWalletChallenge(request, database) {
   return json({ challengeId, address, message, expiresAt }, 201, { "cache-control": "no-store" });
 }
 
-export async function verifyWalletChallenge(request, database) {
-  if (!sameOrigin(request)) return json({ error: "Same-origin request required" }, 403);
+export async function verifyWalletChallenge(request, database, env = {}) {
+  if (!sameOrigin(request, env)) return json({ error: "Same-origin request required" }, 403);
   const body = await request.json().catch(() => ({}));
   const challengeId = String(body.challengeId || "");
   const address = String(body.address || "");
@@ -94,7 +103,7 @@ export async function verifyWalletChallenge(request, database) {
   const normalizedAddress = getAddress(address).toLowerCase();
   const challenge = await database.prepare(`SELECT id,address,origin,message,expires_at,used_at FROM wallet_challenges WHERE id=?`).bind(challengeId).first();
   const now = new Date().toISOString();
-  if (!challenge || challenge.used_at || challenge.address !== normalizedAddress || challenge.origin !== new URL(request.url).origin || challenge.expires_at <= now) {
+  if (!challenge || challenge.used_at || challenge.address !== normalizedAddress || challenge.origin !== effectiveOrigin(request, env) || challenge.expires_at <= now) {
     return json({ error: "Challenge is invalid or expired" }, 409);
   }
   if (!(await verifyWalletSignature({ address: normalizedAddress, message: challenge.message, signature }))) return json({ error: "Wallet signature is invalid" }, 401);
@@ -119,7 +128,7 @@ export async function authenticatedWallet(request, env, database, { requireOrigi
     if (!address || !walletAddressPattern.test(address)) return json({ error: "A valid demo wallet address is required" }, 401);
     return address.toLowerCase();
   }
-  if (requireOrigin && !sameOrigin(request)) return json({ error: "Same-origin request required" }, 403);
+  if (requireOrigin && !sameOrigin(request, env)) return json({ error: "Same-origin request required" }, 403);
   const token = cookieValue(request, "kotae_session");
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return json({ error: "Wallet signature verification is required", code: "WALLET_AUTH_REQUIRED" }, 401);
   const tokenHash = await sha256(token);
@@ -136,8 +145,8 @@ export async function walletSession(request, env, database) {
   return json({ address: wallet }, 200, { "cache-control": "no-store" });
 }
 
-export async function logoutWallet(request, database) {
-  if (!sameOrigin(request)) return json({ error: "Same-origin request required" }, 403);
+export async function logoutWallet(request, database, env = {}) {
+  if (!sameOrigin(request, env)) return json({ error: "Same-origin request required" }, 403);
   const token = cookieValue(request, "kotae_session");
   if (token && /^[0-9a-f]{64}$/.test(token)) await database.prepare(`DELETE FROM wallet_sessions WHERE token_hash=?`).bind(await sha256(token)).run();
   return json({ ok: true }, 200, { "set-cookie": sessionCookie(request, "", 0), "cache-control": "no-store" });
