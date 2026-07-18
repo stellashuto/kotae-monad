@@ -7,6 +7,7 @@ test("product copy and critical transaction affordances render", async () => {
   for (const phrase of ["KOTAE", "Buy the answer", "Not the attempts", "Explore live contests", "Short Video", "Fund & open contest", "Submit finished work", "Valid runners-up", "Monad Testnet"]) assert.match(html, new RegExp(phrase));
   assert.match(html, /<img[\s\S]*src="\/og\.png"[\s\S]*strawberry soda poster brief/);
   assert.match(html, /POST-HACKATHON ROADMAP/);
+  assert.match(html, /app\.js\?v=5/);
   assert.match(html, /Creators sell what/);
   assert.match(html, /fixed AUSD price/);
 });
