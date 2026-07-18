@@ -49,3 +49,5 @@ next-env.d.ts
 /work/
 /.secrets/
 /assets/submissions/
+/public/demo-frames/
+/public/kotae-demo-voice.wav

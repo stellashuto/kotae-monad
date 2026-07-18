@@ -1,39 +1,37 @@
 # KOTAE demo video script
 
-Target length: **2 minutes 20 seconds**. Keep the uploaded video public.
+Target length: **about 90 seconds**. The rendered video is hosted publicly at:
 
-## 0:00–0:20 — Personal problem
+https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.webm
 
-Show the KOTAE home page.
+## 0:00-0:14 - The problem
 
 > I often need one small finished asset, not hours of prompting or an open-ended freelancer process. Paying before I can judge the result puts all the quality risk on me. KOTAE lets me fund the outcome instead.
 
-## 0:20–0:40 — Explain the mechanism
+## 0:14-0:32 - The mechanism
 
-Scroll through “How it works” and show the settlement split.
+> KOTAE is an onchain competition marketplace for finished AI-assisted work. A requester locks one AUSD budget on Monad Testnet. Creators submit completed outcomes with a refundable bond, and the requester chooses the result they actually want.
 
-> I lock one AUSD budget on Monad Testnet. Creators compete with finished work and a refundable submission bond. Deterministic preflight rejects broken files, an oracle records objective compliance onchain, and only I can choose the winner.
+## 0:32-0:49 - Independent eligibility
 
-## 0:40–1:20 — Create a live contest
+> Quality control and taste are deliberately separate. Deterministic checks verify the uploaded file, and an independently controlled eligibility Oracle records objective compliance onchain. The Oracle cannot select a winner or redirect funds.
 
-Connect the wallet, show Monad Testnet, open “Start a contest,” and use a small 2 AUSD visual brief. Record both the AUSD approval and contest transaction confirmations.
+## 0:49-1:06 - Live working proof
 
-> This is not a success-toast demo. The browser approves Testnet AUSD, calls the deployed escrow, waits for finality, and sends the transaction hash to the Worker. The Worker verifies the signer, contract, event, and terms before the contest appears.
+> This live brief has three AUSD locked in the deployed escrow. A separate creator wallet submitted a finished twelve-hundred by twelve-hundred image. The public app now shows one onchain submission and one valid entry, backed by finalized Monad Testnet transactions.
 
-## 1:20–1:50 — Submit finished work
+## 1:06-1:22 - Private files and settlement
 
-From a second wallet, upload a small finished image and confirm the submission bond transaction.
+> The original file stays private and is wallet-gated to the requester and submitting creator. When judging opens, only the requester can select the winner. The contract pays eighty-five percent to the winner, shares five percent with eligible runners-up, and sends ten percent to KOTAE.
 
-> The finished file is stored privately. The public API exposes the onchain submission ID, not the storage key or original file. The requester and submitting creator can open the wallet-gated file.
+## 1:22-1:32 - Proof and close
 
-## 1:50–2:10 — Choose and settle
+> KOTAE is live, open source, and deployed on Monad Testnet. It buys the answer, not the attempts.
 
-Show the eligible entry, open the private file, and choose the outcome. Confirm the wallet transaction and show the receipt UI.
+## Recording facts
 
-> The contract pays 85% to the winner, shares 5% with other eligible creators, and sends 10% to KOTAE. The eligibility oracle cannot choose the winner.
-
-## 2:10–2:20 — Proof
-
-Show the public GitHub repository and the contract address in the footer.
-
-> KOTAE is live, public, open source, and deployed on Monad Testnet.
+- Live app: https://outcome-ausd-spark.shuto-kajita.chatgpt.site
+- Contract: `0x7A8806bfB0292D71081445C48595fDc45Dac46cC`
+- Live demo: `1 VALID / 1 submitted`
+- Requester, Creator, and eligibility Oracle are three distinct Testnet wallets.
+- The video must not claim that winner selection is currently open. It opens after the contest deadline or valid-entry cap.

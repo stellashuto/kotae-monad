@@ -8,14 +8,16 @@ KOTAE flips that workflow:
 
 - lock one AUSD budget on Monad Testnet
 - creators compete with finished work
-- eligibility checks the rules, not taste
+- an independent Oracle checks objective rules, not taste
 - the requester chooses the winner
 - the contract settles 85% / 5% / 10%
 
 Live app: https://outcome-ausd-spark.shuto-kajita.chatgpt.site
 
+Demo: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.webm
+
 GitHub: https://github.com/stellashuto/kotae-monad
 
-Contract: `0xa85De5e792A04B8449D1616415114aAF8eD7Ab54`
+Contract: `0x7A8806bfB0292D71081445C48595fDc45Dac46cC`
 
 #Monad #BuildAnything #SparkHackathon #AUSD
