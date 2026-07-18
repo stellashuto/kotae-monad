@@ -190,3 +190,16 @@ test("legacy contract rows are isolated from the active escrow namespace", async
   assert.match(source, /chain_submission_id='legacy:' \|\| chain_submission_id/);
   assert.match(source, /WHERE lower\(c\.escrow_address\)=\?/);
 });
+
+test("demo orchestration uses separate requester and creator wallets", async () => {
+  const [contestScript, submitScript] = await Promise.all([
+    readFile(new URL("../scripts/create-demo-contest.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/submit-demo-creator.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(contestScript, /demo-requester\.json/);
+  assert.match(contestScript, /demo-creator\.json/);
+  assert.match(contestScript, /functionName: "createContest"/);
+  assert.match(contestScript, /functionName: "transfer"/);
+  assert.match(submitScript, /functionName: "submitWork"/);
+  assert.match(submitScript, /oracleTxHash/);
+});

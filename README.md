@@ -96,6 +96,11 @@ npm run build
 - Platform recipient: `0xE185cFb28854C66A2Fe7972608B3353cebDd8760`
 - Independent eligibility Oracle: `0x04f2aBCdE67e5162d1C811d8ac66216c99E34e87`
 - KotaeEscrow: `0x7a8806bfb0292d71081445c48595fdc45dac46cc`
+- Live demo Requester: `0x8860A4D38bd7DF95a985B5c63dfa9d0A3943980F`
+- Live demo Creator: `0x5edcbE4c643D754D2257DFbDfb5b9c125B96FA0f`
+- Contest creation transaction: `0xbc80253464c25b24c710b16d0cc2e162a0b0b52bf4e6ac7cd3150b98e2d32237`
+- Creator submission transaction: `0x2b5d1eec1ea39865d5a27f1b1f4a64d012a7b3f86ad7f40df18c6aa33f937262`
+- Independent Oracle transaction: `0x3ef1e1662baec84dc2a265a9c7f60debc4742b0bbe1a3cde2fab5cdfb2b87710`
 
 Never commit a funded private key. Hosted secrets are managed outside the repository.
 
