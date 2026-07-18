@@ -1,12 +1,67 @@
 # KOTAE
 
-KOTAE is an AUSD-funded competition marketplace for finished AI work on Monad.
-Requesters fund a brief once, creators submit completed outcomes, automated checks
-filter invalid work, and the requester chooses the winner.
+**Buy the answer. Not the attempts.**
 
-The hackathon MVP focuses on funded custom competitions for visuals, short videos,
-static pages, and micro tools. The post-hackathon roadmap adds creator storefronts
-where finished AI-assisted assets can be sold instantly at fixed AUSD prices.
+KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on Monad Testnet. A requester locks one budget, creators submit completed outcomes, eligibility checks filter broken or non-compliant work, and the requester chooses the winner.
+
+- **Live app:** https://outcome-ausd-spark.shuto-kajita.chatgpt.site
+- **Public repository:** https://github.com/stellashuto/kotae-monad
+- **Network:** Monad Testnet (`10143`)
+- **Contract:** [`0xa85De5e792A04B8449D1616415114aAF8eD7Ab54`](https://testnet.monadvision.com/address/0xa85De5e792A04B8449D1616415114aAF8eD7Ab54)
+
+## Spark submission summary
+
+**Name:** KOTAE
+
+**Description:** An onchain marketplace where buyers fund a result and creators compete with finished work.
+
+**Problem:** When I need a small poster, landing page, short video, or micro-tool, I either pay one person before seeing the result or sort through speculative AI attempts. The buyer carries the quality risk, while serious creators compete with spam and unclear payment promises.
+
+**Solution:** KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Automated evaluation can decide only whether a submission follows the brief; it cannot choose the winner. The requester keeps the creative decision, and the contract settles every AUSD according to fixed rules.
+
+**Category:** Monad Testnet
+
+## What is real
+
+- Browser wallets authenticate with a one-time EIP-191 signature.
+- Contest funding approves and locks real Testnet AUSD in `KotaeEscrow`.
+- Contest creation, submissions, cancellation, slot packs, winner selection, and timeout settlement use wallet-signed Monad Testnet transactions.
+- The Worker accepts a state change only after verifying the finalized receipt, signer, escrow address, expected event, and non-reused transaction hash.
+- Contest state and wallet sessions persist in D1. Finished files stay private in R2 and are served only to the requester or submitting creator.
+- The public app displays live D1 records. An empty database produces an honest empty state, not placeholder contests or fake balances.
+
+## Settlement rules
+
+- **85%** to the selected winner.
+- **5%** shared by other eligible creators.
+- **10%** to the platform.
+- A requester can cancel for a full refund before the first submission.
+- After the judging timeout, eligible creators are paid without requiring the requester; if no valid work exists, 90% returns to the requester.
+
+## Three-minute judge path
+
+1. Open the live app and connect a browser wallet on Monad Testnet.
+2. Use **Get Testnet AUSD** if the wallet needs demo funds.
+3. Open **Start a contest**, enter a brief, and fund it.
+4. Confirm the AUSD approval and contest transaction in the wallet.
+5. See the contest appear from the live API with its onchain contest ID.
+6. From a creator wallet, submit a finished file and its bond.
+7. From the requester wallet, open the private file and choose the outcome after eligibility is recorded.
+
+## Architecture
+
+```text
+Browser wallet
+    | EIP-191 session + signed Testnet transactions
+    v
+KOTAE Worker --------> D1 (contests, sessions, verified tx hashes)
+    |                 R2 (private finished files)
+    | finalized receipt verification
+    v
+KotaeEscrow on Monad Testnet <----> AUSD
+```
+
+The eligibility oracle can record rule compliance but cannot select a winner or redirect funds. Creative choice remains with the requester.
 
 ## Run locally
 
@@ -17,8 +72,9 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:4173`. The local server provides an in-memory API for the
-prototype flow and does not send transactions or persist production data.
+Open `http://127.0.0.1:4173`. Local development uses an in-memory API and does not send transactions unless explicitly configured.
+
+## Validate
 
 ```bash
 npm test
@@ -28,60 +84,20 @@ npm run readiness:testnet
 npm run build
 ```
 
-## Onchain
+`npm run contract:test` deploys an isolated escrow and mock six-decimal token, then exercises cancellation, 85/5/10 payout, timeout settlement, bond return, and replacement limits. `npm run readiness:testnet` checks the deployed Testnet bytecode, token, roles, and storage declarations without requiring a signing key.
 
-`contracts/src/KotaeEscrow.sol` defines `KotaeEscrow`, the source of truth for funds and contest
-state. It is configured for a six-decimal ERC-20 such as AUSD. The Hardhat configuration targets
-Monad Testnet (chain ID `10143`) and compiles for the Prague EVM target required by Monad.
-The canonical Monad Testnet AUSD address is
-`0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`.
-Connected Testnet wallets can request demo AUSD from the header's faucet button;
-the configured Agora faucet is `0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`.
-KOTAE is deployed on Monad Testnet at
-`0xa85De5e792A04B8449D1616415114aAF8eD7Ab54`.
+## Deployment
 
-The contract implements payment locking, zero-submission cancellation, refundable
-submission bonds, two replacements, eligibility-only oracle permissions,
-requester-only winner selection, 85/5/10 settlement, and timeout settlement.
+- Escrow: `0xa85De5e792A04B8449D1616415114aAF8eD7Ab54`
+- Deployment transaction: `0xf3af3ece9f1fa15961becc0ae66de6aa4581fd78f12160caebfca8da15089f35`
+- AUSD: `0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`
+- AUSD faucet: `0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`
+- Platform recipient and eligibility oracle: `0xE185cFb28854C66A2Fe7972608B3353cebDd8760`
 
-`npm run contract:test` deploys the escrow and a mock six-decimal token to an isolated local
-chain, then executes cancellation, winner settlement, timeout, bond return, and replacement-limit
-checks. Testnet deployment remains unpublished and is intentionally gated on a signing key.
-Configure `PRIVATE_KEY` securely outside Git before running; the public AUSD and role addresses
-have checked-in defaults and can be overridden through environment values when needed:
+Never commit a funded private key. Hosted secrets are managed outside the repository.
 
-```bash
-npm run contract:deploy:testnet
-```
+## Hackathon provenance
 
-The non-secret Testnet role defaults are stored in `config/monad-testnet.json`.
-Environment values may override them. Never place a private key in that file.
-`npm run readiness:testnet` verifies the deployed bytecode and constructor roles,
-as well as the D1 and R2 declarations, without requiring a signing key. Hosted
-secrets are intentionally outside this local check.
+Spark runs from July 13 to July 19, 2026. KOTAE's first commit is dated July 16, 2026, and the repository preserves the implementation history rather than presenting a single final dump.
 
-## Production data
-
-`.openai/hosting.json` requests D1 as `DB` and R2 as `UPLOADS`. The canonical
-Worker API in `worker/index.js` keeps private originals in R2 and contest
-metadata in D1. The fixed product rules are in `outputs/kotae-mvp-spec.md`.
-
-Production writes use a one-time EIP-191 wallet challenge. Challenges and hashed
-HTTP-only sessions are stored in D1; challenge reuse, expired sessions, and
-cross-origin writes are rejected. `KOTAE_AUTH_MODE=demo` enables the legacy
-`x-wallet-address` header only for local or private testing and must never be set
-on a published deployment.
-
-Every state-changing marketplace API also verifies a finalized Monad Testnet
-receipt, its signer, the configured escrow address, and the expected contract
-event before updating D1. Configure `MONAD_RPC_URL` and `KOTAE_ESCROW_ADDRESS`
-through the runtime environment, and expose the deployed token through
-`AUSD_ADDRESS`. A transaction hash can be recorded only once. In signature mode,
-the browser's contest creation flow approves AUSD, calls `createContest`, waits
-for Monad finality, and only then asks the API to record the matching event.
-Eligibility updates additionally require `KOTAE_EVALUATOR_SECRET` with at least
-32 characters and a matching onchain `EligibilityRecorded` event.
-
-Apply `drizzle/0002_wallet_auth_and_chain.sql` before running this Worker
-against an existing database. The values expected for local configuration are
-listed in `.env.example`; it intentionally contains no credentials.
+The ready-to-paste submission fields, demo recording plan, and social post copy are in [`docs/spark-submission.md`](docs/spark-submission.md), [`docs/demo-video-script.md`](docs/demo-video-script.md), and [`docs/social-post.md`](docs/social-post.md).

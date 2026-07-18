@@ -36,9 +36,9 @@
           <div class="hero-copy">
             <div class="eyebrow"><span>01</span> A competition marketplace for AI outcomes</div>
             <h1>Buy the answer.<br /><em>Not the attempts.</em></h1>
-            <p class="hero-lede">Fund the brief once. Skilled creators compete with finished work. AI checks the rules—you choose the winner.</p>
+            <p class="hero-lede">I needed small campaign assets without paying before seeing the result or sorting through prompt spam. KOTAE locks one AUSD budget; creators deliver finished work, and I choose what gets paid.</p>
             <div class="hero-actions">
-              <button class="primary-button" id="demoContestButton">Try the live demo <span>↗</span></button>
+              <button class="primary-button" data-route="browse">Explore live contests <span>↗</span></button>
               <button class="text-button" data-route="create">Start a contest <span>→</span></button>
             </div>
             <div class="trust-row">
@@ -160,10 +160,10 @@
           <div><div class="eyebrow"><span>04</span> Your activity</div><h1>Work in<br /><em>motion.</em></h1></div>
           <div class="wallet-card"><span>CONNECTED WALLET</span><strong id="walletAddress">Not connected</strong><small>Monad Testnet · 10143</small></div>
         </div>
-        <div class="metrics-row"><div><span>Funds locked</span><strong>40.00</strong><small>AUSD</small></div><div><span>Open contests</span><strong>2</strong><small>REQUESTER</small></div><div><span>Valid entries</span><strong>7</strong><small>CREATOR</small></div><div><span>Claimable</span><strong>4.20</strong><small>AUSD</small></div></div>
+        <div class="metrics-row"><div><span>Funds locked</span><strong id="dashboardFundsLocked">0.00</strong><small>AUSD</small></div><div><span>Open contests</span><strong id="dashboardOpenContests">0</strong><small>REQUESTER</small></div><div><span>Valid entries</span><strong id="dashboardValidEntries">0</strong><small>CREATOR</small></div><div><span>Claimable</span><strong id="dashboardClaimable">0.00</strong><small>AUSD</small></div></div>
         <div class="dashboard-grid">
           <section><div class="section-kicker">REQUESTING</div><h2>Your competitions</h2><div class="contest-list" id="dashboardContestList"></div></section>
-          <aside class="activity-panel"><div class="section-kicker">ONCHAIN ACTIVITY</div><h2>Recent events</h2><ul><li><i class="valid-dot"></i><div><b>Entry marked valid</b><span>Monad summer launch visual</span></div><time>12m</time></li><li><i></i><div><b>Bond deposited</b><span>1.00 AUSD · Static Page</span></div><time>2h</time></li><li><i></i><div><b>Contest funded</b><span>28.00 AUSD locked</span></div><time>1d</time></li></ul></aside>
+          <aside class="activity-panel"><div class="section-kicker">ONCHAIN ACTIVITY</div><h2>Recent events</h2><ul id="activityList"><li class="empty-state">Connect a wallet to load live activity.</li></ul></aside>
         </div>
       </section>
     </main>
@@ -171,7 +171,7 @@
     <footer>
       <div class="wordmark"><span class="mark">K</span><span>KOTAE</span></div>
       <p>Buy the answer.<br />Not the attempts.</p>
-      <div><a href="#browse" data-route="browse">Explore</a><a href="https://testnet.monadexplorer.com" target="_blank" rel="noreferrer">Monad Explorer ↗</a><span>Built for Spark 2026</span></div>
+      <div><a href="#browse" data-route="browse">Explore</a><a href="https://github.com/stellashuto/kotae-monad" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://testnet.monadvision.com/address/0xa85De5e792A04B8449D1616415114aAF8eD7Ab54" target="_blank" rel="noreferrer">Contract ↗</a><span>Built for Spark 2026</span></div>
     </footer>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

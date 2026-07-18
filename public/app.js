@@ -13,14 +13,6 @@ const ESCROW_ABI = parseAbi([
 ]);
 const ASSET_TYPE = { "Photo / Visual": 0, "Static Page": 1, "Micro Tool": 2, "Short Video": 3 };
 
-const fallbackContests = [
-  { id:"strawberry-soda", title:"New strawberry soda launch poster", type:"Photo / Visual", brief:"Design a square social media poster for a new strawberry soda. Make the drink instantly recognizable, fresh, playful, and premium.", budget:12, deadline:"2d 14h", validCount:4, cap:10, submissions:4, status:"OPEN", requester:"0x7A2c…91F0", demoTheme:"strawberry", must:["Pink strawberry soda bottle or glass","Fresh strawberries and visible bubbles","Readable at mobile size","Square social media composition"], avoid:["Unrelated flavors","Generic stock layout","Health or nutrition claims"] },
-  { id:"cafe-reel", title:"15-second night café launch reel", type:"Short Video", brief:"Create a vertical short video that makes a late-night café feel atmospheric and worth visiting.", budget:12, deadline:"3d 08h", validCount:2, cap:5, submissions:3, status:"OPEN", requester:"0x61Bc…04D2", must:["9:16 vertical composition","15 seconds or less","Readable café name and opening time"], avoid:["Copyrighted music","Rapid flashing","Unlicensed stock footage"] },
-  { id:"cafe-page", title:"One-page site for a night café", type:"Static Page", brief:"A responsive, atmospheric page that turns late-night visitors into table reservations.", budget:28, deadline:"4d 03h", validCount:3, cap:5, submissions:4, status:"OPEN", requester:"0x19bE…A240", must:["Mobile-first","Menu section","Reservation CTA"], avoid:["Stock coffee photos","Heavy animation"] },
-  { id:"invoice-tool", title:"Freelance rate calculator", type:"Micro Tool", brief:"A tiny browser tool that converts a target monthly income into a defensible hourly and project rate.", budget:42, deadline:"6d 19h", validCount:1, cap:5, submissions:1, status:"OPEN", requester:"0x3CD9…782B", must:["Runs without backend","Clear assumptions","Export summary"], avoid:["Sign-up wall","Tracking scripts"] },
-  { id:"timeout-demo", title:"Editorial poster set · timeout ready", type:"Photo / Visual", brief:"Create an editorial poster series for an independent design festival.", budget:10, deadline:"Ended · 48h elapsed", validCount:3, cap:10, submissions:4, status:"JUDGING_EXPIRED", requester:"0x4E10…37B8", must:["Festival date","Three coordinated posters","Print-ready composition"], avoid:["Stock templates","Unreadable event details"] }
-];
-
 const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", chain: { configured: false, deploymentReady: false, ausdAddress: null, ausdFaucetAddress: null, escrowAddress: null, platformRecipient: null, eligibilityOracle: null }, currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
 const views = [...document.querySelectorAll("[data-view]")];
 const toast = document.querySelector("#toast");
@@ -146,10 +138,22 @@ function renderContests() {
   const ordered = [...state.contests]
     .filter(c => state.filter === "All" || c.type === state.filter)
     .sort((a,b) => state.sort === "budget" ? b.budget - a.budget : a.deadline.localeCompare(b.deadline));
-  document.querySelector("#homeContestList").innerHTML = state.contests.slice(0,3).map(contestRow).join("");
+  document.querySelector("#homeContestList").innerHTML = state.contests.slice(0,3).map(contestRow).join("") || `<p class="empty-state">No funded Testnet briefs yet. Open the first live contest.</p>`;
   document.querySelector("#browseContestList").innerHTML = ordered.map(contestRow).join("") || `<p class="empty-state">No open briefs in this category yet.</p>`;
-  document.querySelector("#dashboardContestList").innerHTML = state.contests.slice(0,2).map(contestRow).join("");
+  renderDashboard();
   bindContestRows();
+}
+
+function renderDashboard() {
+  const wallet = state.wallet?.toLowerCase();
+  const owned = wallet ? state.contests.filter(contest => contest.requester.toLowerCase() === wallet) : [];
+  const locked = owned.filter(contest => contest.status === "OPEN").reduce((total, contest) => total + contest.budget, 0);
+  document.querySelector("#dashboardFundsLocked").textContent = locked.toFixed(2);
+  document.querySelector("#dashboardOpenContests").textContent = String(owned.filter(contest => contest.status === "OPEN").length);
+  document.querySelector("#dashboardValidEntries").textContent = String(owned.reduce((total, contest) => total + contest.validCount, 0));
+  document.querySelector("#dashboardClaimable").textContent = "0.00";
+  document.querySelector("#dashboardContestList").innerHTML = owned.map(contestRow).join("") || `<p class="empty-state">${wallet ? "No contests funded by this wallet yet." : "Connect a wallet to load your live activity."}</p>`;
+  document.querySelector("#activityList").innerHTML = owned.slice(0,5).map(contest => `<li><i class="valid-dot"></i><div><b>${escapeHtml(contest.status === "OPEN" ? "Contest funded" : contest.status.replaceAll("_", " "))}</b><span>${escapeHtml(contest.title)} · ${contest.budget.toFixed(2)} AUSD</span></div><time>${escapeHtml(contest.createdAt ? new Date(contest.createdAt).toLocaleDateString() : "Testnet")}</time></li>`).join("") || `<li class="empty-state">No recorded onchain activity for this wallet.</li>`;
 }
 
 function bindContestRows() {
@@ -172,17 +176,20 @@ document.querySelectorAll("[data-route]").forEach(link => link.addEventListener(
   event.preventDefault(); navigate(link.dataset.route);
 }));
 
-document.querySelector("#demoContestButton").addEventListener("click", () => openContest("strawberry-soda"));
-
 function entryCard(number, status = "VALID", theme = "", canSelect = true, record = {}) {
-  const strawberryEntries = ["Fresh Splash", "Bold Launch", "Studio Pop", "Illustrated Fizz"];
-  const title = theme === "strawberry" ? strawberryEntries[number - 1] : `Creator outcome ${number}`;
-  const previewClass = theme === "strawberry" ? ` strawberry-preview strawberry-preview-${number}` : "";
-  return `<article class="entry-card"><div class="entry-preview${previewClass}" role="img" aria-label="${escapeHtml(title)} watermarked submission preview"></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(title)}</strong><span>System watermark applied · Original stays private</span></p><button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${canSelect ? "Select this outcome" : "Judging window expired"}</button></article>`;
+  const creator = record.creator ? `${record.creator.slice(0,6)}…${record.creator.slice(-4)}` : `Creator ${number}`;
+  const chainSubmission = record.chainSubmissionId ? `#${record.chainSubmissionId}` : "Pending onchain ID";
+  const privateFile = record.id ? `<a class="private-file-link" href="/api/submissions/${encodeURIComponent(record.id)}/file" target="_blank" rel="noreferrer">Open private finished work ↗</a>` : "";
+  return `<article class="entry-card"><div class="entry-proof"><span>ONCHAIN ENTRY</span><strong>${escapeHtml(chainSubmission)}</strong><small>${escapeHtml(creator)}</small></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(creator)}</strong><span>Original stored privately · Access is wallet-gated</span></p>${privateFile}<button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${canSelect ? "Select this outcome" : "Judging window expired"}</button></article>`;
 }
 
 async function openContest(id) {
-  const contest = state.contests.find(item => item.id === id) || fallbackContests.find(item => item.id === id) || state.contests[0] || fallbackContests[0];
+  const contest = state.contests.find(item => item.id === id);
+  if (!contest) {
+    notify("This live contest is no longer available.");
+    navigate("browse");
+    return;
+  }
   state.currentContest = contest;
   if (state.authMode === "signature" && contest.chainContestId && !contest.entries) {
     try {
@@ -197,8 +204,8 @@ async function openContest(id) {
   const timeoutReady = contest.status === "JUDGING_EXPIRED";
   const entryRecords = Array.isArray(contest.entries)
     ? contest.entries.filter(entry => entry.eligibility === "VALID")
-    : Array.from({length: Math.min(contest.validCount, 4)}, () => ({eligibility:"VALID"}));
-  const entries = entryRecords.map((entry,i) => entryCard(i+1, entry.eligibility, contest.demoTheme, isOpen && (state.authMode === "demo" || Boolean(entry.id && entry.chainSubmissionId)), entry)).join("") || `<p>No valid entries were approved.</p>`;
+    : [];
+  const entries = entryRecords.map((entry,i) => entryCard(i+1, entry.eligibility, "", isOpen && (state.authMode === "demo" || Boolean(entry.id && entry.chainSubmissionId)), entry)).join("") || `<p>No eligible finished work has been recorded yet.</p>`;
   const cancelAction = contest.status === "OPEN" && contest.submissions === 0 ? `<button class="cancel-contest" id="cancelContest">Cancel & refund before first submission</button>` : "";
   const creatorVersion = state.creatorVersions[contest.id] || 0;
   const submitLabel = creatorVersion === 0 ? "Submit finished work ↗" : creatorVersion < 3 ? `Replace your submission · ${3 - creatorVersion} left` : "Replacement limit reached";
@@ -211,7 +218,7 @@ async function openContest(id) {
       <aside class="prize-box"><span>BASE PRIZE LOCKED</span><strong>${contest.budget.toFixed(2)}</strong><small>AUSD · MONAD TESTNET</small><div class="capacity"><div><i style="width:${percent}%"></i></div><p><span>${contest.validCount} VALID</span><span>${contest.cap} MAX</span></p></div>${submissionAction}${slotAction}${cancelAction}</aside>
     </div>
     <div class="detail-body"><section class="rules"><div class="section-kicker">THE BRIEF</div><div class="rule-group"><h2>Acceptance rules</h2><h3>Must include</h3><ul>${(contest.must || []).map(rule=>`<li>${escapeHtml(rule)}</li>`).join("")}</ul></div><div class="rule-group"><h3>Avoid</h3><ul>${(contest.avoid || []).map(rule=>`<li>${escapeHtml(rule)}</li>`).join("")}</ul></div><div class="rule-group"><h3>License</h3><ul><li>Commercial rights transfer to requester only for the selected work</li><li>Losing creators keep full rights to their work</li></ul></div></section>
-    <section class="entries"><div class="section-kicker">SYSTEM-CHECKED PREVIEWS</div><h2>${contest.validCount} valid outcomes</h2><div class="entry-grid">${entries}</div></section></div>
+    <section class="entries"><div class="section-kicker">WALLET-GATED FINISHED WORK</div><h2>${contest.validCount} valid outcomes</h2><div class="entry-grid">${entries}</div></section></div>
   </div>`;
   document.querySelector("[data-back]").onclick = () => navigate("browse");
   document.querySelector("#submitEntry")?.addEventListener("click", showSubmitDialog);
@@ -506,13 +513,12 @@ async function authenticateWallet(address) {
 
 async function connectWallet() {
   if (!window.ethereum) {
-    state.wallet = "0x000000000000000000000000000000000000dEaD";
-    updateWalletUI(); notify("Demo wallet connected. Install a wallet to sign Monad transactions."); return;
+    throw new Error("Install a browser wallet to sign Monad Testnet transactions.");
   }
   try {
     await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{chainId:MONAD_CHAIN_ID}] });
   } catch (error) {
-    if (error.code === 4902) await window.ethereum.request({ method:"wallet_addEthereumChain", params:[{chainId:MONAD_CHAIN_ID,chainName:"Monad Testnet",nativeCurrency:{name:"MON",symbol:"MON",decimals:18},rpcUrls:["https://testnet-rpc.monad.xyz"],blockExplorerUrls:["https://testnet.monadexplorer.com"]}] });
+    if (error.code === 4902) await window.ethereum.request({ method:"wallet_addEthereumChain", params:[{chainId:MONAD_CHAIN_ID,chainName:"Monad Testnet",nativeCurrency:{name:"MON",symbol:"MON",decimals:18},rpcUrls:["https://testnet-rpc.monad.xyz"],blockExplorerUrls:["https://testnet.monadvision.com"]}] });
   }
   const accounts = await window.ethereum.request({ method:"eth_requestAccounts" });
   state.wallet = state.authMode === "signature" ? await authenticateWallet(accounts[0]) : accounts[0];
@@ -526,9 +532,10 @@ function updateWalletUI() {
   document.querySelector("#walletAddress").textContent = short;
   document.querySelector("#ausdFaucetButton").hidden = !state.wallet || !state.chain.ausdFaucetAddress;
   document.querySelector("#deployEscrowButton").hidden = !state.wallet || !state.chain.deploymentReady || Boolean(state.chain.escrowAddress);
+  renderDashboard();
 }
 
-document.querySelector("#walletButton").onclick = () => connectWallet().catch(() => notify("Wallet connection was cancelled."));
+document.querySelector("#walletButton").onclick = () => connectWallet().catch(error => notify(error.message || "Wallet connection was cancelled."));
 document.querySelector("#ausdFaucetButton").onclick = event => {
   const button = event.currentTarget; button.disabled = true; button.textContent = "Requesting AUSD…";
   requestTestAUSD().catch(error => notify(error.message || "AUSD request failed.")).finally(() => { button.disabled = false; button.textContent = "Get Testnet AUSD"; });
@@ -589,8 +596,8 @@ async function boot() {
   } catch {
     state.authMode="demo";
   }
-  try { const response=await fetch("/api/contests"); if(!response.ok) throw new Error(); const remote=(await response.json()).contests; state.contests=remote.length?remote:[...fallbackContests]; }
-  catch { state.contests=[...fallbackContests]; }
+  try { const response=await fetch("/api/contests"); if(!response.ok) throw new Error(); state.contests=(await response.json()).contests; }
+  catch { state.contests=[]; notify("Live contest data is temporarily unavailable."); }
   renderContests();
   const route=location.hash.replace("#",""); navigate(["browse","create","dashboard"].includes(route)?route:"home");
 }

@@ -108,6 +108,8 @@ async function listContests(env) {
     validCount: Number(row.valid_count),
     submissions: Number(row.submission_count),
     deadline: row.submission_deadline,
+    txHash: row.tx_hash,
+    createdAt: row.created_at,
     status: row.status === "OPEN" && Date.now() > Date.parse(row.submission_deadline) + 48 * 60 * 60 * 1000 ? "JUDGING_EXPIRED" : row.status,
   }));
   return json({ contests });
@@ -124,6 +126,24 @@ async function listContestSubmissions(env, contestId) {
     chainSubmissionId: row.chain_submission_id,
     submittedAt: row.submitted_at,
   })) });
+}
+
+async function privateSubmissionFile(request, env, submissionId) {
+  const database = await db(env);
+  const viewer = await authenticatedWallet(request, env, database);
+  if (viewer instanceof Response) return viewer;
+  const submission = await database.prepare(`SELECT s.file_key,s.original_name,s.mime_type,s.creator,c.requester FROM submissions s JOIN contests c ON c.id=s.contest_id WHERE s.id=?`).bind(submissionId).first();
+  if (!submission) return json({ error: "Submission not found" }, 404);
+  if (viewer !== submission.creator.toLowerCase() && viewer !== submission.requester.toLowerCase()) return json({ error: "Private submission access denied" }, 403);
+  const object = await env.UPLOADS.get(submission.file_key);
+  if (!object) return json({ error: "Submission file not found" }, 404);
+  const headers = new Headers({
+    "content-type": submission.mime_type,
+    "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(submission.original_name)}`,
+    "cache-control": "private, no-store",
+    "x-content-type-options": "nosniff",
+  });
+  return new Response(object.body, { headers });
 }
 
 async function createContest(request, env) {
@@ -365,6 +385,8 @@ export default { async fetch(request, env) {
   let match = url.pathname.match(/^\/api\/contests\/([^/]+)\/submissions$/);
   if (match && request.method === "GET") return listContestSubmissions(env,match[1]);
   if (match && request.method === "POST") return submitWork(request,env,match[1]);
+  match = url.pathname.match(/^\/api\/submissions\/([^/]+)\/file$/);
+  if (match && request.method === "GET") return privateSubmissionFile(request,env,match[1]);
   match = url.pathname.match(/^\/api\/submissions\/([^/]+)\/eligibility$/);
   if (match && request.method === "PATCH") return eligibility(request,env,match[1]);
   match = url.pathname.match(/^\/api\/contests\/([^/]+)\/settle$/);

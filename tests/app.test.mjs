@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("product copy and critical transaction affordances render", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
-  for (const phrase of ["KOTAE", "Buy the answer", "Not the attempts", "Try the live demo", "Short Video", "Fund & open contest", "Submit finished work", "Valid runners-up", "Monad Testnet"]) assert.match(html, new RegExp(phrase));
+  for (const phrase of ["KOTAE", "Buy the answer", "Not the attempts", "Explore live contests", "Short Video", "Fund & open contest", "Submit finished work", "Valid runners-up", "Monad Testnet"]) assert.match(html, new RegExp(phrase));
   assert.match(html, /<img[\s\S]*src="\/og\.png"[\s\S]*strawberry soda poster brief/);
   assert.match(html, /POST-HACKATHON ROADMAP/);
   assert.match(html, /Creators sell what/);
@@ -42,16 +42,20 @@ test("public contest data exposes chain identifiers without private originals", 
   assert.match(worker, /chainContestId: row\.chain_contest_id/);
   assert.match(worker, /chainSubmissionId: row\.chain_submission_id/);
   assert.match(worker, /request\.method === "GET"\) return listContestSubmissions/);
-  assert.doesNotMatch(worker, /listContestSubmissions[\s\S]{0,1000}file_key/);
+  assert.match(worker, /SELECT id,creator,version,eligibility,chain_submission_id,submitted_at FROM submissions/);
+  assert.match(worker, /privateSubmissionFile/);
+  assert.match(worker, /Private submission access denied/);
+  assert.match(worker, /cache-control": "private, no-store"/);
 });
 
-test("featured contest continues the strawberry soda hero story", async () => {
+test("live marketplace avoids placeholder contests and exposes real outcome controls", async () => {
   const [app, css] = await Promise.all([
     readFile(new URL("../public/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/styles.css", import.meta.url), "utf8")
   ]);
-  assert.match(app, /New strawberry soda launch poster/);
-  assert.match(app, /demoTheme:"strawberry"/);
+  assert.doesNotMatch(app, /fallbackContests/);
+  assert.doesNotMatch(app, /Demo wallet connected/);
+  assert.match(app, /Open private finished work/);
   assert.match(app, /Select this outcome/);
   assert.match(app, /Outcome unlocked/);
   assert.match(app, /Commercial rights transferred/);
@@ -67,12 +71,11 @@ test("featured contest continues the strawberry soda hero story", async () => {
   assert.match(app, /SHA-256/);
   assert.match(app, /AI checks eligibility—not taste/);
   assert.match(app, /NEEDS FIX/);
-  assert.match(app, /15-second night café launch reel/);
   assert.match(app, /MP4 or WebM/);
   assert.match(app, /Video duration/);
   assert.match(app, /30-second limit/);
-  assert.match(css, /\.strawberry-preview-4/);
-  assert.match(css, /background-image:url\('\/og\.png'\)/);
+  assert.match(css, /\.entry-proof/);
+  assert.match(css, /\.private-file-link/);
   assert.match(css, /\.receipt-modal/);
 });
 
