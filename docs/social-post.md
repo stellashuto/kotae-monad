@@ -14,7 +14,7 @@ KOTAE flips that workflow:
 
 Live app: https://outcome-ausd-spark.shuto-kajita.chatgpt.site
 
-Demo: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4?v=14
+Demo: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo-v15.mp4
 
 GitHub: https://github.com/stellashuto/kotae-monad
 

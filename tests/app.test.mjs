@@ -7,7 +7,7 @@ test("product copy and critical transaction affordances render", async () => {
   for (const phrase of ["KOTAE", "Buy the answer", "Not the attempts", "Explore live contests", "Short Video", "Fund & open contest", "Submit finished work", "Valid runners-up", "Monad Testnet"]) assert.match(html, new RegExp(phrase));
   assert.match(html, /<img[\s\S]*src="\/og\.png"[\s\S]*strawberry soda poster brief/);
   assert.match(html, /POST-HACKATHON ROADMAP/);
-  assert.match(html, /app\.js\?v=14/);
+  assert.match(html, /app\.js\?v=15/);
   assert.match(html, /Creators sell what/);
   assert.match(html, /fixed AUSD price/);
 });
@@ -20,13 +20,13 @@ test("production worker embeds the static site when an asset binding is unavaila
   assert.match(worker, /embeddedStaticResponse\(request\)/);
   assert.match(worker, /globalThis\.__KOTAE_STATIC_ASSETS__/);
   assert.match(worker, /"cache-control": "no-cache"/);
-  assert.match(worker, /CURRENT_SITE_VERSION = "14"/);
+  assert.match(worker, /CURRENT_SITE_VERSION = "15"/);
   assert.match(worker, /"accept-ranges": "bytes"/);
   assert.match(worker, /"content-range"/);
   assert.match(worker, /status: 206/);
   assert.match(worker, /Response\.redirect/);
   assert.match(buildScript, /embeddedStaticAssets/);
-  assert.match(buildScript, /"\/kotae-demo\.mp4"/);
+  assert.match(buildScript, /"\/kotae-demo-v15\.mp4"/);
   assert.match(buildScript, /contentType: "video\/mp4"/);
   assert.match(buildScript, /"globalThis\.__KOTAE_STATIC_ASSETS__"/);
 });

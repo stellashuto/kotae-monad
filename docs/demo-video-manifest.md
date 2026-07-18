@@ -10,7 +10,7 @@
 - File size: 1,218,278 bytes
 - SHA-256: `40B24E64CA6F9FC7E9D7577ED6BF489A94D1E8B6CAA370D5A87090E07A182AB2`
 - Maximum length: 3 minutes
-- Public URL: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4?v=14
+- Public URL: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo-v15.mp4
 
 ## Exact facts shown
 
