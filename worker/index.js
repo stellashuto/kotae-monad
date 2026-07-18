@@ -15,6 +15,7 @@ import {
 } from "./chain.js";
 
 const embeddedStaticAssets = globalThis.__KOTAE_STATIC_ASSETS__;
+const CURRENT_SITE_VERSION = "7";
 const initializedBindings = new WeakSet();
 async function db(env) {
   if (!env.DB) throw new Error("D1 binding DB is required");
@@ -43,6 +44,10 @@ function decodeBase64(value) {
 function embeddedStaticResponse(request) {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
   const url = new URL(request.url);
+  if ((url.pathname === "/" || url.pathname === "/index.html") && url.searchParams.has("v") && url.searchParams.get("v") !== CURRENT_SITE_VERSION) {
+    url.searchParams.set("v", CURRENT_SITE_VERSION);
+    return Response.redirect(url.toString(), 302);
+  }
   const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
   const asset = embeddedStaticAssets?.[pathname];
   if (!asset) return null;
