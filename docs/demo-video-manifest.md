@@ -2,15 +2,15 @@
 
 ## Export
 
-- File: `public/kotae-demo.webm`
-- Container: WebM
-- Video: VP9 or VP8, 1280x720, 30 fps
-- Audio: Opus, generated locally from the approved English narration
+- File: `public/kotae-demo.mp4`
+- Container: MP4
+- Video: H.264 Main Profile, 640x360, 30 fps
+- Audio: AAC, generated locally from the approved English narration
 - Duration: 1 minute 32.34 seconds
-- File size: 6,883,091 bytes
-- SHA-256: `93518A7EA8FCC501CA98366334D37E30FB48C48C94FFCB69360D7DD01CC14AB7`
+- File size: 1,408,853 bytes
+- SHA-256: `035E13626743572ECE2731DC81128E3D2D350BE428BF49FE23D959B0FB62CC6C`
 - Maximum length: 3 minutes
-- Public URL: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.webm
+- Public URL: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4
 
 ## Exact facts shown
 

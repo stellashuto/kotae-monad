@@ -15,7 +15,7 @@ import {
 import { recordObjectiveEligibility } from "./oracle.js";
 
 const embeddedStaticAssets = globalThis.__KOTAE_STATIC_ASSETS__;
-const CURRENT_SITE_VERSION = "9";
+const CURRENT_SITE_VERSION = "13";
 const initializedBindings = new WeakSet();
 async function db(env) {
   if (!env.DB) throw new Error("D1 binding DB is required");
@@ -51,6 +51,44 @@ function decodeBase64(value) {
   return bytes;
 }
 
+function rangedEmbeddedResponse(request, bytes, asset) {
+  const total = bytes.byteLength;
+  const headers = {
+    "content-type": asset.contentType,
+    "cache-control": "public, max-age=3600",
+    "accept-ranges": "bytes",
+  };
+  const range = request.headers.get("range");
+  if (!range) {
+    headers["content-length"] = String(total);
+    return new Response(request.method === "HEAD" ? null : bytes, { headers });
+  }
+
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  if (!match) {
+    headers["content-range"] = `bytes */${total}`;
+    return new Response(null, { status: 416, headers });
+  }
+
+  let start = match[1] ? Number(match[1]) : 0;
+  let end = match[2] ? Number(match[2]) : total - 1;
+  if (!match[1] && match[2]) {
+    const suffixLength = Number(match[2]);
+    start = Math.max(0, total - suffixLength);
+    end = total - 1;
+  }
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start >= total || end < start) {
+    headers["content-range"] = `bytes */${total}`;
+    return new Response(null, { status: 416, headers });
+  }
+
+  end = Math.min(end, total - 1);
+  const slice = bytes.slice(start, end + 1);
+  headers["content-length"] = String(slice.byteLength);
+  headers["content-range"] = `bytes ${start}-${end}/${total}`;
+  return new Response(request.method === "HEAD" ? null : slice, { status: 206, headers });
+}
+
 function embeddedStaticResponse(request) {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
   const url = new URL(request.url);
@@ -61,6 +99,7 @@ function embeddedStaticResponse(request) {
   const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
   const asset = embeddedStaticAssets?.[pathname];
   if (!asset) return null;
+  if (asset.range && asset.encoding === "base64") return rangedEmbeddedResponse(request, decodeBase64(asset.body), asset);
   const body = request.method === "HEAD" ? null : asset.encoding === "base64" ? decodeBase64(asset.body) : asset.body;
   return new Response(body, {
     headers: {

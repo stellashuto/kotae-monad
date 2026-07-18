@@ -2,7 +2,7 @@
 
 Target length: **about 90 seconds**. The rendered video is hosted publicly at:
 
-https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.webm
+https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4
 
 ## 0:00-0:14 - The problem
 

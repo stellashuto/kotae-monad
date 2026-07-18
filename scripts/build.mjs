@@ -17,17 +17,19 @@ await build({
   target: "es2022",
   logLevel: "warning",
 });
-const [indexHtml, stylesCss, appJs, ogPng] = await Promise.all([
+const [indexHtml, stylesCss, appJs, ogPng, demoVideo] = await Promise.all([
   readFile(resolve(root, "public", "index.html"), "utf8"),
   readFile(resolve(root, "public", "styles.css"), "utf8"),
   readFile(resolve(dist, "app.js"), "utf8"),
   readFile(resolve(root, "public", "og.png")),
+  readFile(resolve(root, "public", "kotae-demo.mp4")),
 ]);
 const embeddedStaticAssets = {
   "/index.html": { body: indexHtml, contentType: "text/html; charset=utf-8" },
   "/styles.css": { body: stylesCss, contentType: "text/css; charset=utf-8" },
   "/app.js": { body: appJs, contentType: "text/javascript; charset=utf-8" },
   "/og.png": { body: ogPng.toString("base64"), contentType: "image/png", encoding: "base64" },
+  "/kotae-demo.mp4": { body: demoVideo.toString("base64"), contentType: "video/mp4", encoding: "base64", range: true },
 };
 await build({
   entryPoints: [resolve(root, "worker", "index.js")],
