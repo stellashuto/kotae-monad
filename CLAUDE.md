@@ -64,7 +64,8 @@ The current HEAD includes the following final-review fixes on top of `c9505c4`:
 - `npm run readiness:testnet`: `ready: true`.
 - Production `/api/health`: HTTP 200, signature wallet writes, chain ID 10143.
 - Production `/api/contests`: HTTP 200 with one live contest.
-- The previous production browser check on v19 showed the countdown, direct contest refresh, phase-gated winner button, wallet-gated private file, and no console errors. Verify v20 after deployment.
+- The previous production browser check on v19 showed the countdown, direct contest refresh, phase-gated winner button, wallet-gated private file, and no console errors.
+- Production v20 external verification: public HTML, CSP, Vercel `/api/health`, Sites `/api/health`, and `/api/contests` all return HTTP 200; v20 assets and the computed judging deadline are present.
 - Mobile browser check at approximately 390 px: no horizontal overflow; menu, Explore, How it works, and Dashboard work.
 - Production dependency audit previously reported no production vulnerabilities. The development-only Hardhat tree reported three high advisories through `adm-zip`, with no available direct fix at the time of review.
 
