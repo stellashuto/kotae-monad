@@ -14,7 +14,7 @@ https://kotae-monad-spark.vercel.app/kotae-demo-v18.mp4
 
 ## 0:32-0:49 - Independent eligibility
 
-> Quality control and taste are deliberately separate. Deterministic checks verify the uploaded file, and an independently controlled eligibility Oracle records objective file eligibility onchain. The Oracle cannot select a winner or redirect funds.
+> File eligibility and taste are deliberately separate. Deterministic checks verify the actual file signature, size, hash, duplicates, and video duration when applicable. An independently controlled Oracle records that result onchain, but it cannot judge the brief, select a winner, or redirect funds.
 
 ## 0:49-1:06 - Live working proof
 

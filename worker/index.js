@@ -13,15 +13,23 @@ import {
   verifyEscrowTransaction,
 } from "./chain.js";
 import { recordObjectiveEligibility } from "./oracle.js";
+import { inspectUploadedFile, mimeTypeForFormat, PUBLIC_UPLOAD_MAX_BYTES } from "./file-checks.js";
+import { contestWindow } from "./timing.js";
 
 const embeddedStaticAssets = globalThis.__KOTAE_STATIC_ASSETS__;
-const CURRENT_SITE_VERSION = "19";
+const CURRENT_SITE_VERSION = "20";
 const initializedBindings = new WeakSet();
 async function db(env) {
   if (!env.DB) throw new Error("D1 binding DB is required");
   if (!initializedBindings.has(env.DB)) {
     await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
     try { await env.DB.prepare(`ALTER TABLE contests ADD COLUMN escrow_address TEXT`).run(); } catch { /* Existing or fresh schema already has the column. */ }
+    try { await env.DB.prepare(`ALTER TABLE contests ADD COLUMN judging_started_at TEXT`).run(); } catch { /* Existing or fresh schema already has the column. */ }
+    try { await env.DB.prepare(`ALTER TABLE submissions ADD COLUMN content_hash TEXT`).run(); } catch { /* Existing or fresh schema already has the column. */ }
+    try { await env.DB.prepare(`ALTER TABLE submissions ADD COLUMN duration_seconds REAL`).run(); } catch { /* Existing or fresh schema already has the column. */ }
+    await env.DB.prepare(`INSERT OR IGNORE INTO submission_hashes (content_hash,submission_id,contest_id,creator,version,created_at)
+      SELECT json_extract(payload_json,'$.contentHash'),json_extract(payload_json,'$.submissionId'),contest_id,actor,CAST(COALESCE(json_extract(payload_json,'$.version'),1) AS INTEGER),created_at
+      FROM events WHERE event_type='SUBMISSION_UPLOADED' AND json_valid(payload_json) AND length(json_extract(payload_json,'$.contentHash'))=64`).run();
     const currentEscrow = String(env.KOTAE_ESCROW_ADDRESS || "").toLowerCase();
     const legacyEscrow = String(env.LEGACY_KOTAE_ESCROW_ADDRESS || "").toLowerCase();
     if (legacyEscrow && currentEscrow && legacyEscrow !== currentEscrow) {
@@ -135,7 +143,9 @@ async function listContests(env) {
   const database = await db(env);
   const currentEscrow = String(env.KOTAE_ESCROW_ADDRESS || "").toLowerCase();
   const rows = await database.prepare(`SELECT c.*, COUNT(CASE WHEN s.eligibility='VALID' THEN 1 END) valid_count, COUNT(s.id) submission_count FROM contests c LEFT JOIN submissions s ON s.contest_id=c.id WHERE lower(c.escrow_address)=? GROUP BY c.id ORDER BY c.created_at DESC`).bind(currentEscrow).all();
-  const contests = rows.results.map((row) => ({
+  const contests = rows.results.map((row) => {
+    const timing = contestWindow(row);
+    return {
     id: row.id,
     chainContestId: row.chain_contest_id,
     requester: row.requester,
@@ -149,10 +159,13 @@ async function listContests(env) {
     validCount: Number(row.valid_count),
     submissions: Number(row.submission_count),
     deadline: row.submission_deadline,
+    judgingStartedAt: row.judging_started_at || null,
+    judgingDeadline: Number.isFinite(timing.judgingDeadlineAt) ? new Date(timing.judgingDeadlineAt).toISOString() : null,
     txHash: row.tx_hash,
     createdAt: row.created_at,
-    status: row.status === "OPEN" && Date.now() > Date.parse(row.submission_deadline) + 48 * 60 * 60 * 1000 ? "JUDGING_EXPIRED" : row.status,
-  }));
+    status: timing.timeoutReady ? "JUDGING_EXPIRED" : row.status,
+  };
+  });
   return json({ contests });
 }
 
@@ -178,11 +191,13 @@ async function privateSubmissionFile(request, env, submissionId) {
   if (viewer !== submission.creator.toLowerCase() && viewer !== submission.requester.toLowerCase()) return json({ error: "Private submission access denied" }, 403);
   const object = await env.UPLOADS.get(submission.file_key);
   if (!object) return json({ error: "Submission file not found" }, 404);
+  const disposition = /^(image|video)\//.test(submission.mime_type) ? "inline" : "attachment";
   const headers = new Headers({
     "content-type": submission.mime_type,
-    "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(submission.original_name)}`,
+    "content-disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(submission.original_name)}`,
     "cache-control": "private, no-store",
     "x-content-type-options": "nosniff",
+    "content-security-policy": "default-src 'none'; sandbox",
   });
   return new Response(object.body, { headers });
 }
@@ -227,19 +242,23 @@ async function submitWork(request, env, contestId) {
   if (creator instanceof Response) return creator;
   const form = await request.formData(), file = form.get("file"), txHash = String(form.get("txHash") || "");
   if (!(file instanceof File)) return json({ error: "Original file is required" }, 422);
-  const contest = await database.prepare(`SELECT asset_type,valid_cap,status,chain_contest_id FROM contests WHERE id=?`).bind(contestId).first();
+  const contest = await database.prepare(`SELECT asset_type,valid_cap,status,chain_contest_id,submission_deadline FROM contests WHERE id=?`).bind(contestId).first();
   if (!contest || contest.status !== "OPEN" || !contest.chain_contest_id) return json({ error: "Contest is not open" }, 409);
-  const limit = contest.asset_type === "Short Video" ? 50_000_000 : contest.asset_type === "Photo / Visual" ? 20_000_000 : 10_000_000;
-  if (file.size > limit) return json({ error: "File exceeds type limit" }, 413);
+  if (Date.now() >= Date.parse(contest.submission_deadline)) return json({ error: "The submission window has closed" }, 409);
+  if (file.size > PUBLIC_UPLOAD_MAX_BYTES) return json({ error: "File exceeds the 4 MB public upload limit" }, 413);
   if (file.size < 1024) return json({ error: "File is empty or too small" }, 422);
-  const imageAllowed = ["image/png","image/jpeg","image/webp"].includes(file.type) || /\.(png|jpe?g|webp)$/i.test(file.name);
-  const videoAllowed = ["video/mp4","video/webm"].includes(file.type) || /\.(mp4|webm)$/i.test(file.name);
-  const zipAllowed = ["application/zip","application/x-zip-compressed"].includes(file.type) || /\.zip$/i.test(file.name);
-  if (contest.asset_type === "Photo / Visual" ? !imageAllowed : contest.asset_type === "Short Video" ? !videoAllowed : !zipAllowed) return json({ error: "Unsupported file format" }, 415);
   const existing = await database.prepare(`SELECT id,version,chain_submission_id FROM submissions WHERE contest_id=? AND creator=?`).bind(contestId,creator).first();
   if (existing && existing.version >= 3) return json({ error: "Replacement limit reached" }, 409);
   const submissionId = existing?.id || makeId("submission"), version = (existing?.version || 0) + 1;
   const bytes = await file.arrayBuffer(), digest = await crypto.subtle.digest("SHA-256", bytes), contentHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2,"0")).join("");
+  const duplicateRow = await database.prepare(`SELECT submission_id FROM submission_hashes WHERE content_hash=?`).bind(contentHash).first();
+  const objectiveResult = inspectUploadedFile({
+    assetType: contest.asset_type,
+    bytes: new Uint8Array(bytes),
+    duplicate: Boolean(duplicateRow),
+    ownershipAttested: String(form.get("ownershipAttested") || "") === "true",
+  });
+  const storedMimeType = mimeTypeForFormat(objectiveResult.format);
   const reused = await rejectReusedTransaction(database, txHash);
   if (reused) return reused;
   const verified = await verifiedChainTransaction(env, { txHash, actor: creator, eventName: "WorkSubmitted" });
@@ -253,31 +272,37 @@ async function submitWork(request, env, contestId) {
     (existing?.chain_submission_id && existing.chain_submission_id !== chainSubmissionId)
   ) return json({ error: "Onchain submission does not match the uploaded work" }, 422);
   const fileKey = `private/${contestId}/${submissionId}/v${version}/${file.name}`;
-  await env.UPLOADS.put(fileKey,bytes,{httpMetadata:{contentType:file.type},customMetadata:{creator,contestId,contentHash,txHash:verified.txHash}});
+  await env.UPLOADS.put(fileKey,bytes,{httpMetadata:{contentType:storedMimeType},customMetadata:{creator,contestId,contentHash,txHash:verified.txHash}});
   const bond = contest.asset_type === "Photo / Visual" ? 500_000 : contest.asset_type === "Short Video" || contest.asset_type === "Static Page" ? 1_000_000 : 2_000_000;
   const now = new Date().toISOString();
   const submissionWrite = existing
-    ? database.prepare(`UPDATE submissions SET version=?,file_key=?,original_name=?,mime_type=?,byte_size=?,chain_submission_id=?,eligibility='CHECKING',submitted_at=? WHERE id=?`).bind(version,fileKey,file.name,file.type,file.size,chainSubmissionId,now,submissionId)
-    : database.prepare(`INSERT INTO submissions (id,contest_id,creator,version,file_key,original_name,mime_type,byte_size,bond_micros,chain_submission_id,submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(submissionId,contestId,creator,version,fileKey,file.name,file.type,file.size,bond,chainSubmissionId,now);
+    ? database.prepare(`UPDATE submissions SET version=?,file_key=?,original_name=?,mime_type=?,byte_size=?,chain_submission_id=?,content_hash=?,duration_seconds=?,eligibility='CHECKING',reason_codes_json='[]',ai_message=NULL,submitted_at=? WHERE id=?`).bind(version,fileKey,file.name,storedMimeType,file.size,chainSubmissionId,contentHash,objectiveResult.durationSeconds,now,submissionId)
+    : database.prepare(`INSERT INTO submissions (id,contest_id,creator,version,file_key,original_name,mime_type,byte_size,bond_micros,chain_submission_id,content_hash,duration_seconds,submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(submissionId,contestId,creator,version,fileKey,file.name,storedMimeType,file.size,bond,chainSubmissionId,contentHash,objectiveResult.durationSeconds,now);
   await database.batch([
     submissionWrite,
     database.prepare(`INSERT INTO events (contest_id,actor,event_type,payload_json,created_at) VALUES (?,?,?,?,?)`).bind(contestId,creator,"SUBMISSION_UPLOADED",JSON.stringify({submissionId,chainSubmissionId,version,contentHash,txHash:verified.txHash}),now),
     chainRecord(database,verified,creator,"WORK_SUBMITTED",contestId,now),
+    database.prepare(`INSERT OR IGNORE INTO submission_hashes (content_hash,submission_id,contest_id,creator,version,created_at) VALUES (?,?,?,?,?,?)`).bind(contentHash,submissionId,contestId,creator,version,now),
   ]);
   let objectiveEligibility = "CHECKING", oracleTxHash = null;
   try {
-    const oracle = await recordObjectiveEligibility(env, chainSubmissionId);
-    await database.batch([
-      database.prepare(`UPDATE submissions SET eligibility='VALID',reason_codes_json=?,ai_message=? WHERE id=?`).bind(JSON.stringify(oracle.reasonCodes),oracle.message,submissionId),
+    const oracle = await recordObjectiveEligibility(env, chainSubmissionId, objectiveResult);
+    const eligibilityWrites = [
+      database.prepare(`UPDATE submissions SET eligibility=?,reason_codes_json=?,ai_message=? WHERE id=?`).bind(oracle.status,JSON.stringify(oracle.reasonCodes),oracle.message,submissionId),
       database.prepare(`INSERT INTO chain_transactions (tx_hash,actor,action,contest_id,block_number,verified_at) VALUES (?,?,?,?,?,?)`).bind(oracle.txHash,oracle.actor,"ELIGIBILITY_RECORDED",contestId,oracle.blockNumber,new Date().toISOString()),
-      database.prepare(`INSERT INTO events (contest_id,actor,event_type,payload_json,created_at) VALUES (?,?,?,?,?)`).bind(contestId,oracle.actor,"OBJECTIVE_ELIGIBILITY_RECORDED",JSON.stringify({submissionId,chainSubmissionId,txHash:oracle.txHash}),new Date().toISOString()),
-    ]);
-    objectiveEligibility = "VALID";
+      database.prepare(`INSERT INTO events (contest_id,actor,event_type,payload_json,created_at) VALUES (?,?,?,?,?)`).bind(contestId,oracle.actor,"OBJECTIVE_ELIGIBILITY_RECORDED",JSON.stringify({submissionId,chainSubmissionId,status:oracle.status,reasonCodes:oracle.reasonCodes,txHash:oracle.txHash}),new Date().toISOString()),
+    ];
+    if (oracle.status === "VALID") {
+      const blockTime = new Date(oracle.blockTimestamp * 1000).toISOString();
+      eligibilityWrites.push(database.prepare(`UPDATE contests SET judging_started_at=COALESCE(judging_started_at,?) WHERE id=? AND (SELECT COUNT(*) FROM submissions WHERE contest_id=? AND eligibility='VALID') >= valid_cap`).bind(blockTime,contestId,contestId));
+    }
+    await database.batch(eligibilityWrites);
+    objectiveEligibility = oracle.status;
     oracleTxHash = oracle.txHash;
   } catch (error) {
     console.error("Independent Oracle finalization failed", error instanceof Error ? error.message : String(error));
   }
-  return json({ submissionId, chainSubmissionId, version, contentHash, txHash: verified.txHash, oracleTxHash, eligibility: objectiveEligibility, bondMicros: bond, bondRequired: !existing, replacementsRemaining: 3 - version }, 201);
+  return json({ submissionId, chainSubmissionId, version, contentHash, txHash: verified.txHash, oracleTxHash, eligibility: objectiveEligibility, reasonCodes: objectiveResult.reasonCodes, durationSeconds: objectiveResult.durationSeconds, bondMicros: bond, bondRequired: !existing, replacementsRemaining: 3 - version }, 201);
 }
 
 async function settle(request, env, contestId) {
@@ -357,10 +382,10 @@ async function settleAfterTimeout(request, env, contestId) {
   const settler = await walletForWrite(request, env, database);
   if (settler instanceof Response) return settler;
   const body = await request.json().catch(() => ({}));
-  const contest = await database.prepare(`SELECT status,budget_micros,submission_deadline,chain_contest_id FROM contests WHERE id=?`).bind(contestId).first();
+  const contest = await database.prepare(`SELECT status,budget_micros,submission_deadline,judging_started_at,chain_contest_id FROM contests WHERE id=?`).bind(contestId).first();
   if (!contest) return json({ error: "Contest not found" }, 404);
-  const deadline = Date.parse(contest.submission_deadline), judgingEndsAt = deadline + 48 * 60 * 60 * 1000;
-  if (contest.status !== "OPEN" || !Number.isFinite(deadline) || Date.now() < judgingEndsAt) return json({ error: "The 48-hour judging window has not expired" }, 409);
+  const timing = contestWindow(contest);
+  if (!timing.timeoutReady) return json({ error: "The 48-hour judging window has not expired" }, 409);
   const valid = await database.prepare(`SELECT COUNT(*) AS total FROM submissions WHERE contest_id=? AND eligibility='VALID'`).bind(contestId).first();
   const slotEvents = await database.prepare(`SELECT payload_json FROM events WHERE contest_id=? AND event_type='SLOTS_ADDED'`).bind(contestId).all();
   const slotFeesMicros = slotEvents.results.reduce((total,event) => { try { return total + Number(JSON.parse(event.payload_json).feeMicros || 0); } catch { return total; } },0);

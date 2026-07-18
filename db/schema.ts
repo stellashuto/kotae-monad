@@ -10,6 +10,7 @@ export const schemaStatements = [
     budget_micros INTEGER NOT NULL,
     valid_cap INTEGER NOT NULL,
     submission_deadline TEXT NOT NULL,
+    judging_started_at TEXT,
     status TEXT NOT NULL DEFAULT 'OPEN',
     tx_hash TEXT,
     chain_contest_id TEXT UNIQUE,
@@ -29,6 +30,8 @@ export const schemaStatements = [
     byte_size INTEGER NOT NULL,
     bond_micros INTEGER NOT NULL,
     chain_submission_id TEXT,
+    content_hash TEXT,
+    duration_seconds REAL,
     eligibility TEXT NOT NULL DEFAULT 'CHECKING',
     reason_codes_json TEXT NOT NULL DEFAULT '[]',
     ai_message TEXT,
@@ -46,6 +49,15 @@ export const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS contests_status_deadline_idx ON contests(status, submission_deadline)`,
   `CREATE INDEX IF NOT EXISTS submissions_contest_eligibility_idx ON submissions(contest_id, eligibility)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS submissions_chain_id_idx ON submissions(chain_submission_id) WHERE chain_submission_id IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS submission_hashes (
+    content_hash TEXT PRIMARY KEY,
+    submission_id TEXT NOT NULL,
+    contest_id TEXT NOT NULL,
+    creator TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS submission_hashes_contest_idx ON submission_hashes(contest_id, created_at)`,
   `CREATE TABLE IF NOT EXISTS wallet_challenges (
     id TEXT PRIMARY KEY,
     address TEXT NOT NULL,

@@ -8,7 +8,7 @@ KOTAE flips that workflow:
 
 - lock one AUSD budget on Monad Testnet
 - creators compete with finished work
-- an independent Oracle checks objective rules, not taste
+- an independent Oracle records objective file checks, not creative taste
 - the requester chooses the winner
 - the contract settles 85% / 5% / 10%
 

@@ -4,7 +4,7 @@
 
 Perform a final, evidence-based review of the KOTAE Spark hackathon submission. Focus on correctness, security, onchain/UI consistency, deployability, and whether the live product satisfies the stated hackathon requirements. Do not make changes until findings are reported and prioritized.
 
-Start from commit `c9505c4` on `master`.
+Review the current `master` HEAD. Commit `c9505c4` is the baseline before the final Claude-review fixes.
 
 ## Product summary
 
@@ -12,7 +12,7 @@ KOTAE is a funded competition marketplace for finished AI-assisted work:
 
 1. A requester publishes a concrete brief and locks AUSD.
 2. Creators submit finished work with a refundable bond.
-3. An independent eligibility Oracle records objective file/rule compliance.
+3. An independent eligibility Oracle records deterministic file eligibility; it does not judge the creative brief.
 4. After the deadline or valid-entry cap, only the requester chooses the creative winner.
 5. The Monad Testnet contract settles the prize using the documented 85/5/10 split.
 
@@ -45,31 +45,26 @@ Production uses Vercel for the public app and same-origin API surface. Vercel fo
 
 ## Latest changes to review
 
-Commit `c9505c4` introduced the following:
+The current HEAD includes the following final-review fixes on top of `c9505c4`:
 
-- Submission is enabled only before the deadline and before the valid-entry cap.
-- Winner selection is enabled only after the deadline or cap, and only for the requester.
-- Timeout settlement remains separate from normal requester judging.
-- Contest list deadlines now display a countdown/phase instead of raw ISO text.
-- Contest details use localized `<time datetime>` output.
-- Direct links use `#contest/<contest-id>` and survive refresh.
-- Private finished-work links no longer navigate unauthenticated users to raw JSON errors.
-- Public uploads are capped at 4 MB to remain below Vercel's request-body limit.
-- Mobile navigation and visible keyboard focus states were added.
-- Vercel security headers now include CSP, `nosniff`, referrer policy, and permissions policy.
-- Submission/demo copy now describes objective eligibility separately from requester winner selection.
-- Static asset version advanced to `v19`.
+- Early-cap judging records the finalized Oracle transaction block time and uses that same `judgingStartedAt + 48h` window in Worker and UI phase calculations.
+- Winner and timeout receipts display the actual Monad transaction hash with an explorer link; only local demo mode is labeled simulated.
+- The Worker enforces the 4 MB limit, checks file signatures, rejects duplicate hashes, requires ownership attestation, and validates MP4/WebM duration at 30 seconds or less.
+- The Oracle records either `VALID` or `NEEDS_FIX` from those deterministic server checks; it does not claim to review creative brief compliance.
+- D1 schema/migration data now stores judging start, content hashes, video duration, and immutable hash history.
+- Google Fonts were removed and CSP now permits only self-hosted styles/fonts.
+- Static asset version advanced to `v20`.
 
 ## Verification already completed
 
-- `npm test`: 26/26 passing.
+- `npm test`: 28/28 passing.
 - `npx hardhat run scripts/test-contract.mjs --no-compile`: 4/4 passing.
 - `npm run build`: passing.
 - `npm run build:vercel`: passing.
 - `npm run readiness:testnet`: `ready: true`.
 - Production `/api/health`: HTTP 200, signature wallet writes, chain ID 10143.
 - Production `/api/contests`: HTTP 200 with one live contest.
-- Production browser check: v19 loaded, countdown shown, direct contest refresh works, winner button disabled before judging, private file prompts for wallet verification, and no console errors.
+- The previous production browser check on v19 showed the countdown, direct contest refresh, phase-gated winner button, wallet-gated private file, and no console errors. Verify v20 after deployment.
 - Mobile browser check at approximately 390 px: no horizontal overflow; menu, Explore, How it works, and Dashboard work.
 - Production dependency audit previously reported no production vulnerabilities. The development-only Hardhat tree reported three high advisories through `adm-zip`, with no available direct fix at the time of review.
 
@@ -96,7 +91,7 @@ npm.cmd run build
 npm.cmd run build:vercel
 npx.cmd hardhat run scripts/test-contract.mjs --no-compile
 npm.cmd run readiness:testnet
-git diff 88a769a..c9505c4
+git diff c9505c4..HEAD
 ```
 
 The readiness command contacts Monad Testnet. Do not run deployment, funding, contest creation, submission, settlement, environment-variable, or secret-rotation commands during a read-only review.

@@ -18,7 +18,7 @@ KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on
 
 **Problem:** When I need a small poster, landing page, short video, or micro-tool, I either pay one person before seeing the result or sort through speculative AI attempts. The buyer carries the quality risk, while serious creators compete with spam and unclear payment promises.
 
-**Solution:** KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Deterministic checks verify file integrity, format, size, content hash, and ownership attestation; a separately controlled Oracle records that objective result onchain. It cannot choose the winner. The requester evaluates the creative brief and keeps only the winner decision, while the contract settles every AUSD according to fixed rules.
+**Solution:** KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Deterministic checks verify the actual file signature, 4 MB size limit, content hash, duplicate status, applicable video duration, and explicit rights attestation; a separately controlled Oracle records that objective result onchain. It cannot judge the creative brief or choose the winner. The requester evaluates the brief and keeps only the winner decision, while the contract settles every AUSD according to fixed rules.
 
 **Category:** Monad Testnet
 

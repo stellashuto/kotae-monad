@@ -6,12 +6,6 @@ const eligibilityAbi = parseAbi([
   "function recordEligibility(uint256 submissionId, uint8 eligibility, bytes32 reasonHash)",
 ]);
 
-const objectiveResult = {
-  status: "VALID",
-  reasonCodes: [],
-  message: "Objective file integrity, format, size, content hash, and creator attestation verified.",
-};
-
 function oracleAccount(env) {
   const privateKey = String(env.ELIGIBILITY_ORACLE_PRIVATE_KEY || "").trim();
   if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) throw new Error("Independent eligibility Oracle signer is not configured");
@@ -23,9 +17,12 @@ function oracleAccount(env) {
   return account;
 }
 
-export async function recordObjectiveEligibility(env, chainSubmissionId) {
+export async function recordObjectiveEligibility(env, chainSubmissionId, objectiveResult) {
   if (!isAddress(env.KOTAE_ESCROW_ADDRESS || "", { strict: false }) || !env.MONAD_RPC_URL) {
     throw new Error("Monad Oracle transaction is not configured");
+  }
+  if (!objectiveResult || !["VALID", "NEEDS_FIX"].includes(objectiveResult.status)) {
+    throw new Error("A deterministic objective file result is required");
   }
   const account = oracleAccount(env);
   const chain = defineChain({
@@ -42,18 +39,20 @@ export async function recordObjectiveEligibility(env, chainSubmissionId) {
     address: getAddress(env.KOTAE_ESCROW_ADDRESS),
     abi: eligibilityAbi,
     functionName: "recordEligibility",
-    args: [BigInt(chainSubmissionId), 1, reasonHash],
+    args: [BigInt(chainSubmissionId), objectiveResult.status === "VALID" ? 1 : 2, reasonHash],
   });
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
   if (receipt.status !== "success") throw new Error("Independent Oracle transaction reverted");
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const finalized = await publicClient.getBlock({ blockTag: "finalized" });
     if (finalized.number >= receipt.blockNumber) {
+      const transactionBlock = await publicClient.getBlock({ blockNumber: receipt.blockNumber });
       return {
         ...objectiveResult,
         actor: account.address.toLowerCase(),
         txHash: txHash.toLowerCase(),
         blockNumber: String(receipt.blockNumber),
+        blockTimestamp: Number(transactionBlock.timestamp),
       };
     }
     await new Promise((resolve) => setTimeout(resolve, 500));

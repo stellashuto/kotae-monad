@@ -7,7 +7,7 @@ test("product copy and critical transaction affordances render", async () => {
   for (const phrase of ["KOTAE", "Buy the answer", "Not the attempts", "Explore live contests", "Short Video", "Fund & open contest", "Submit finished work", "Valid runners-up", "Monad Testnet"]) assert.match(html, new RegExp(phrase));
   assert.match(html, /<video[\s\S]*poster="\/og\.png"[\s\S]*aria-label="KOTAE product demo video"/);
   assert.match(html, /POST-HACKATHON ROADMAP/);
-  assert.match(html, /app\.js\?v=19/);
+  assert.match(html, /app\.js\?v=20/);
   assert.match(html, /<video controls preload="metadata" playsinline/);
   assert.match(html, /<source src="\/kotae-demo-v18\.mp4" type="video\/mp4"/);
   assert.match(html, /Creators sell what/);
@@ -22,7 +22,7 @@ test("production worker embeds the static site when an asset binding is unavaila
   assert.match(worker, /embeddedStaticResponse\(request\)/);
   assert.match(worker, /globalThis\.__KOTAE_STATIC_ASSETS__/);
   assert.match(worker, /"cache-control": "no-cache"/);
-  assert.match(worker, /CURRENT_SITE_VERSION = "19"/);
+  assert.match(worker, /CURRENT_SITE_VERSION = "20"/);
   assert.match(worker, /"accept-ranges": "bytes"/);
   assert.match(worker, /"content-range"/);
   assert.match(worker, /status: 206/);
@@ -70,11 +70,15 @@ test("live marketplace avoids placeholder contests and exposes real outcome cont
   assert.match(app, /Open private finished work/);
   assert.doesNotMatch(app, /recordEligibility/);
   assert.doesNotMatch(app, /Review objective eligibility/);
-  assert.match(app, /Independent Oracle recorded objective eligibility/);
-  assert.match(app, /Requester cannot mark entries valid or invalid/);
+  assert.match(app, /Independent Oracle recorded objective file eligibility/);
+  assert.match(app, /requester cannot mark entries valid or invalid/i);
   assert.doesNotMatch(app, /source:"AI"/);
   assert.match(app, /Select this outcome/);
   assert.match(app, /Outcome unlocked/);
+  assert.match(app, /MONAD_EXPLORER_TX_BASE/);
+  assert.match(app, /transactionReceiptMarkup\(txHash\)/);
+  assert.doesNotMatch(app, /Demo transaction/);
+  assert.doesNotMatch(app, /0x9c1e…7a2f|0x71be…48c0/);
   assert.match(app, /Commercial rights transferred/);
   assert.match(app, /creator bonds returned/);
   assert.match(app, /Cancel & refund before first submission/);
@@ -86,7 +90,7 @@ test("live marketplace avoids placeholder contests and exposes real outcome cont
   assert.match(app, /Added to participation pool/);
   assert.match(app, /slotFees/);
   assert.match(app, /SHA-256/);
-  assert.match(app, /Independent Oracle checks mechanics—not taste/);
+  assert.match(app, /Independent Oracle checks file mechanics—not taste/);
   assert.match(app, /NEEDS FIX/);
   assert.match(app, /MP4 or WebM/);
   assert.match(app, /Video duration/);
@@ -105,8 +109,10 @@ test("public UI enforces hosting-safe uploads and contract-aligned contest phase
     readFile(new URL("../docs/spark-submission.md", import.meta.url), "utf8"),
   ]);
   assert.match(app, /PUBLIC_UPLOAD_MAX_BYTES = 4_000_000/);
-  assert.match(app, /submissionOpen: isOpen && !deadlineReached && !capReached/);
-  assert.match(app, /judgingOpen: isOpen && \(deadlineReached \|\| capReached\)/);
+  assert.match(app, /judgingStartedAt/);
+  assert.match(app, /judgingDeadline/);
+  assert.match(app, /submissionOpen: isOpen && !timeoutReady && !deadlineReached && !capReached/);
+  assert.match(app, /judgingOpen: isOpen && !timeoutReady && \(deadlineReached \|\| capReached\)/);
   assert.match(app, /Available when judging opens/);
   assert.match(app, /startsWith\("contest\/"\)/);
   assert.match(app, /data-private-file/);
@@ -116,6 +122,8 @@ test("public UI enforces hosting-safe uploads and contract-aligned contest phase
   assert.match(css, /:focus-visible/);
   assert.match(vercel, /Content-Security-Policy/);
   assert.match(vercel, /X-Content-Type-Options/);
+  assert.doesNotMatch(vercel, /fonts\.googleapis|fonts\.gstatic/);
+  assert.doesNotMatch(css, /fonts\.googleapis|fonts\.gstatic/);
   assert.doesNotMatch(submissionCopy, /objective brief compliance/i);
 });
 
@@ -129,16 +137,26 @@ test("cancellation API enforces requester and zero-submission rules", async () =
 });
 
 test("submission API allows two replacements without a second bond", async () => {
-  const worker = await readFile(new URL("../worker/index.js", import.meta.url), "utf8");
+  const [worker, fileChecks] = await Promise.all([
+    readFile(new URL("../worker/index.js", import.meta.url), "utf8"),
+    readFile(new URL("../worker/file-checks.js", import.meta.url), "utf8"),
+  ]);
   assert.match(worker, /existing\.version >= 3/);
   assert.match(worker, /bondRequired: !existing/);
   assert.match(worker, /replacementsRemaining: 3 - version/);
   assert.match(worker, /UPDATE submissions SET version=/);
   assert.match(worker, /crypto\.subtle\.digest\("SHA-256"/);
-  assert.match(worker, /Unsupported file format/);
+  assert.match(worker, /PUBLIC_UPLOAD_MAX_BYTES/);
+  assert.match(worker, /inspectUploadedFile/);
+  assert.match(worker, /ownershipAttested/);
+  assert.match(worker, /submission_hashes/);
+  assert.match(worker, /mimeTypeForFormat/);
+  assert.match(worker, /content-security-policy/);
+  assert.match(worker, /\? "inline" : "attachment"/);
   assert.match(worker, /SUBMISSION_UPLOADED/);
   assert.match(worker, /"Short Video": 8/);
-  assert.match(worker, /video\/mp4/);
+  assert.match(fileChecks, /mp4/);
+  assert.match(fileChecks, /webm/);
 });
 
 test("slot pack API adds five slots and splits its fee", async () => {
@@ -161,13 +179,16 @@ test("timeout settlement releases funds without selecting a winner", async () =>
   assert.match(app, /TIMEOUT SETTLEMENT CONFIRMED/);
   assert.match(app, /No winner was selected/);
   assert.match(app, /No exclusive original or commercial rights were transferred/);
-  assert.match(app, /deadlineAt/);
-  assert.match(worker, /48 \* 60 \* 60 \* 1000/);
+  assert.match(app, /judgingDeadlineAt/);
+  assert.match(worker, /contestWindow/);
+  assert.match(worker, /judging_started_at/);
   assert.match(worker, /eligibility='VALID'/);
   assert.match(worker, /TIMEOUT_SETTLED/);
   assert.match(worker, /\/timeout-settle\$/);
   assert.match(worker, /rightsTransferred: false/);
   assert.match(schema, /'Short Video'/);
+  assert.match(schema, /judging_started_at TEXT/);
+  assert.match(schema, /submission_hashes/);
 });
 
 test("production writes require wallet sessions and finalized chain receipts", async () => {
@@ -206,6 +227,7 @@ test("demo wallets are validated and objective eligibility uses a separated serv
   assert.match(source, /requesterOracleSeparated/);
   assert.match(oracle, /ELIGIBILITY_ORACLE_PRIVATE_KEY/);
   assert.match(oracle, /recordEligibility/);
+  assert.match(oracle, /objectiveResult\.status === "VALID" \? 1 : 2/);
   assert.notEqual(config.eligibilityOracle.toLowerCase(), config.platformRecipient.toLowerCase());
 });
 

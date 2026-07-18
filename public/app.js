@@ -13,6 +13,8 @@ const ESCROW_ABI = parseAbi([
 ]);
 const ASSET_TYPE = { "Photo / Visual": 0, "Static Page": 1, "Micro Tool": 2, "Short Video": 3 };
 const PUBLIC_UPLOAD_MAX_BYTES = 4_000_000;
+const JUDGING_WINDOW_MS = 48 * 60 * 60 * 1000;
+const MONAD_EXPLORER_TX_BASE = "https://testnet.monadvision.com/tx/";
 
 const state = { contests: [], filter: "All", sort: "ending", wallet: null, authMode: "demo", chain: { configured: false, deploymentReady: false, ausdAddress: null, ausdFaucetAddress: null, escrowAddress: null, platformRecipient: null, eligibilityOracle: null }, currentContest: null, creatorVersions: {}, creatorEligibility: {}, submissionHashes: {} };
 const views = [...document.querySelectorAll("[data-view]")];
@@ -32,15 +34,22 @@ function escapeHtml(value = "") {
 function contestTiming(contest, now = Date.now()) {
   const deadlineAt = Date.parse(contest.deadline);
   const hasDeadline = Number.isFinite(deadlineAt);
+  const storedJudgingStartAt = Date.parse(contest.judgingStartedAt);
+  const judgingStartAt = Number.isFinite(storedJudgingStartAt) ? storedJudgingStartAt : deadlineAt;
+  const storedJudgingDeadlineAt = Date.parse(contest.judgingDeadline);
+  const judgingDeadlineAt = Number.isFinite(storedJudgingDeadlineAt) ? storedJudgingDeadlineAt : Number.isFinite(judgingStartAt) ? judgingStartAt + JUDGING_WINDOW_MS : Number.NaN;
   const capReached = Number(contest.cap) > 0 && Number(contest.validCount) >= Number(contest.cap);
   const deadlineReached = hasDeadline && now >= deadlineAt;
   const isOpen = contest.status === "OPEN";
+  const timeoutReady = contest.status === "JUDGING_EXPIRED" || (isOpen && Number.isFinite(judgingDeadlineAt) && now > judgingDeadlineAt);
   return {
     deadlineAt,
     hasDeadline,
-    timeoutReady: contest.status === "JUDGING_EXPIRED",
-    submissionOpen: isOpen && !deadlineReached && !capReached,
-    judgingOpen: isOpen && (deadlineReached || capReached),
+    judgingStartAt,
+    judgingDeadlineAt,
+    timeoutReady,
+    submissionOpen: isOpen && !timeoutReady && !deadlineReached && !capReached,
+    judgingOpen: isOpen && !timeoutReady && (deadlineReached || capReached),
   };
 }
 
@@ -239,7 +248,7 @@ function entryCard(number, status = "VALID", theme = "", canSelect = true, recor
   const chainSubmission = record.chainSubmissionId ? `#${record.chainSubmissionId}` : "Pending onchain ID";
   const privateFile = record.id ? `<button class="private-file-link" type="button" data-private-file="/api/submissions/${encodeURIComponent(record.id)}/file">Open private finished work ↗</button>` : "";
   const objectiveNote = status === "CHECKING" ? `<small class="oracle-status">Independent Oracle is finalizing objective file checks.</small>` : "";
-  const actionLabel = status !== "VALID" ? "Eligibility pending" : canSelect ? "Select this outcome" : selectionLabel;
+  const actionLabel = status === "NEEDS_FIX" ? "Needs fix before judging" : status !== "VALID" ? "Eligibility pending" : canSelect ? "Select this outcome" : selectionLabel;
   return `<article class="entry-card"><div class="entry-proof"><span>ONCHAIN ENTRY</span><strong>${escapeHtml(chainSubmission)}</strong><small>${escapeHtml(creator)}</small></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(creator)}</strong><span>Original stored privately · Access is wallet-gated</span></p>${privateFile}${objectiveNote}<button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${escapeHtml(actionLabel)}</button></article>`;
 }
 
@@ -353,7 +362,7 @@ async function reviewSubmission(file, contest, hash) {
   const duration = contest.type === "Short Video" && videoType ? await readVideoDuration(file) : null;
   const duplicate = Object.values(state.submissionHashes).flat().includes(hash);
   const checks = [
-    { label:"File integrity", detail:file.size >= 1024 ? `${(file.size/1024).toFixed(1)} KB readable` : "File is empty or too small", pass:file.size >= 1024, source:"SYSTEM" },
+    { label:"Minimum payload size", detail:file.size >= 1024 ? `${(file.size/1024).toFixed(1)} KB readable` : "File is empty or too small", pass:file.size >= 1024, source:"SYSTEM" },
     { label:"Format & size", detail:formatPass && file.size <= maxSize ? `${file.type || "Extension verified"} within limit` : "Unsupported format or file exceeds limit", pass:formatPass && file.size <= maxSize, source:"SYSTEM" },
     { label:"Duplicate screening", detail:duplicate ? "Identical SHA-256 already submitted" : `Unique hash ${hash.slice(0,8)}…`, pass:!duplicate, source:"SYSTEM" },
     { label:"Rights attestation", detail:"Creator ownership confirmation recorded", pass:true, source:"CREATOR" }
@@ -363,9 +372,14 @@ async function reviewSubmission(file, contest, hash) {
 }
 
 function showEligibilityReport(contest, file, review, version, replacing, recordedEligibility = "CHECKING") {
-  const status = review.valid ? recordedEligibility : "NEEDS FIX";
+  const status = review.valid ? recordedEligibility : "NEEDS_FIX";
+  const statusLabel = status === "NEEDS_FIX" ? "NEEDS FIX" : status;
+  const recordedValid = status === "VALID";
+  const recordedNeedsFix = status === "NEEDS_FIX";
   const rows = review.checks.map(check => `<li class="${check.pass ? "pass" : "fail"}"><i>${check.pass ? "✓" : "!"}</i><div><strong>${escapeHtml(check.label)}</strong><span>${escapeHtml(check.detail)}</span></div><em>${check.source}</em></li>`).join("");
-  const report = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">OBJECTIVE PREFLIGHT · VERSION ${version}</div><div class="eligibility-result ${review.valid ? "valid" : "needs-fix"}"><span>${status}</span><strong>${review.valid ? status === "VALID" ? "Independent Oracle recorded objective eligibility" : "Uploaded onchain · Oracle finalizing" : "Fix the flagged file checks"}</strong><p>${review.valid ? "The format, size, integrity, content hash, and creator attestation passed. Creative brief quality remains the requester's winner decision." : "No valid-entry slot was consumed."}</p></div><ul class="eligibility-checks">${rows}</ul><div class="eligibility-boundary"><strong>Independent Oracle checks mechanics—not taste.</strong><span>The Requester cannot mark entries valid or invalid; the Requester only chooses the winner from valid outcomes.</span></div><button class="primary-button wide" id="eligibilityContinue">${review.valid ? "Return to onchain entries" : replacing ? "Choose another replacement" : "Return to submission"} <span>→</span></button><small class="modal-note">SHA-256 ${review.hash.slice(0,16)}… · ${escapeHtml(file.name)}</small>`);
+  const headline = recordedValid ? "Independent Oracle recorded objective file eligibility" : recordedNeedsFix ? "Independent Oracle recorded needs-fix" : review.valid ? "Uploaded onchain · Oracle finalizing" : "Fix the flagged file checks";
+  const explanation = recordedValid ? "The file signature, 4 MB size limit, content hash, duplicate screen, applicable video duration, and rights attestation passed. Creative quality remains the requester's decision." : recordedNeedsFix || !review.valid ? "No valid-entry slot was consumed. Replace the file after correcting the objective checks." : "The onchain entry is waiting for the independent Oracle transaction to finalize.";
+  const report = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">OBJECTIVE FILE PREFLIGHT · VERSION ${version}</div><div class="eligibility-result ${recordedValid ? "valid" : recordedNeedsFix || !review.valid ? "needs-fix" : "checking"}"><span>${statusLabel}</span><strong>${headline}</strong><p>${explanation}</p></div><ul class="eligibility-checks">${rows}</ul><div class="eligibility-boundary"><strong>Independent Oracle checks file mechanics—not taste.</strong><span>The requester cannot mark entries valid or invalid; only the requester chooses a winner from valid outcomes.</span></div><button class="primary-button wide" id="eligibilityContinue">${recordedNeedsFix || !review.valid ? replacing ? "Choose another replacement" : "Return to submission" : "Return to onchain entries"} <span>→</span></button><small class="modal-note">SHA-256 ${review.hash.slice(0,16)}… · ${escapeHtml(file.name)}</small>`);
   report.querySelector(".modal").classList.add("eligibility-modal");
   report.querySelector("#eligibilityContinue").onclick = () => { report.remove(); openContest(contest.id); };
 }
@@ -395,7 +409,7 @@ function showSubmitDialog() {
     let recordedVersion = nextVersion;
     let recordedSubmission = null;
     try {
-      const form = new FormData(); form.append("file", file);
+      const form = new FormData(); form.append("file", file); form.append("ownershipAttested", "true");
       if (state.authMode === "signature") {
         if (!replacing) await approveAUSD(parseUnits(String(bonds[contest.type]), 6));
         const txHash = await callEscrow("submitWork", [chainContestId(contest), `0x${hash}`]);
@@ -498,6 +512,15 @@ function requestSlotPack(contest) {
   };
 }
 
+function transactionReceiptMarkup(txHash) {
+  if (/^0x[0-9a-fA-F]{64}$/.test(String(txHash || ""))) {
+    const value = String(txHash);
+    const short = `${value.slice(0,10)}…${value.slice(-8)}`;
+    return `<a href="${MONAD_EXPLORER_TX_BASE}${encodeURIComponent(value)}" target="_blank" rel="noreferrer"><strong>${short}</strong><small>View transaction ↗</small></a>`;
+  }
+  return `<strong>LOCAL DEMO</strong><small>Simulated transaction</small>`;
+}
+
 function requestTimeoutSettlement(contest) {
   const slotFees = contest.slotFees || 0;
   const creatorPool = contest.budget * .90 + slotFees / 2;
@@ -512,14 +535,17 @@ function requestTimeoutSettlement(contest) {
   modal.querySelector("#confirmTimeout").onclick = async () => {
     const button = modal.querySelector("#confirmTimeout");
     button.disabled = true; button.textContent = "Confirming neutral settlement…";
+    let confirmedTxHash = "demo:timeout";
     try {
       const txHash = state.authMode === "signature" ? await callEscrow("settleAfterTimeout", [chainContestId(contest)]) : "demo:timeout";
+      confirmedTxHash = txHash;
       const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/timeout-settle`, { method:"POST", headers:{"content-type":"application/json","x-wallet-address":state.wallet || "demo:settler"}, body:JSON.stringify({txHash}) });
       if (!response.ok && response.status !== 404) {
         const result = await response.json().catch(() => ({}));
         button.disabled = false; button.innerHTML = 'Settle timeout on Monad <span>↗</span>';
         return notify(result.error || "Timeout settlement is not available yet.");
       }
+      if (response.ok) confirmedTxHash = (await response.json()).txHash || txHash;
     } catch (error) {
       if (state.authMode === "signature") {
         button.disabled = false; button.innerHTML = 'Settle timeout on Monad <span>↗</span>';
@@ -530,14 +556,14 @@ function requestTimeoutSettlement(contest) {
     await new Promise(resolve => setTimeout(resolve, 800));
     contest.status = validCount > 0 ? "TIMEOUT_SETTLED" : "REFUNDED_NO_VALID";
     modal.remove();
-    showTimeoutReceipt(contest, validCount, eachCreator, requesterRefund, platform, creatorPool + platform);
+    showTimeoutReceipt(contest, validCount, eachCreator, requesterRefund, platform, creatorPool + platform, confirmedTxHash);
   };
 }
 
-function showTimeoutReceipt(contest, validCount, eachCreator, requesterRefund, platform, totalSettled) {
+function showTimeoutReceipt(contest, validCount, eachCreator, requesterRefund, platform, totalSettled, txHash) {
   const headline = validCount > 0 ? "Creator pool distributed." : "Requester partially refunded.";
   const creatorValue = validCount > 0 ? `${eachCreator.toFixed(2)} AUSD each` : "0.00 AUSD";
-  const receipt = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker receipt-kicker"><i></i> TIMEOUT SETTLEMENT CONFIRMED</div><div class="receipt-head"><div><h2>${headline}</h2><p>The 48-hour requester judging window expired. The contract released funds without choosing a creative winner.</p></div><div class="receipt-chain"><span>MONAD TESTNET</span><strong>0x71be…48c0</strong><small>Demo transaction</small></div></div><div class="timeout-receipt-grid"><div><span>VALID CREATORS</span><strong>${validCount}</strong><small>${creatorValue}</small></div><div><span>REQUESTER REFUND</span><strong>${requesterRefund.toFixed(2)}</strong><small>AUSD</small></div><div><span>KOTAE PROTOCOL</span><strong>${platform.toFixed(2)}</strong><small>AUSD</small></div><div class="timeout-total"><span>TOTAL SETTLED</span><strong>${totalSettled.toFixed(2)}</strong><small>AUSD</small></div></div><div class="timeout-boundary receipt-boundary"><strong>No winner was selected.</strong><span>No exclusive original or commercial rights were transferred. All creator bonds were returned.</span></div><button class="primary-button wide" id="timeoutDashboard">Continue to dashboard <span>→</span></button><small class="modal-note">In production, the transaction hash links to Monad Explorer and each transfer is verifiable onchain.</small>`);
+  const receipt = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker receipt-kicker"><i></i> TIMEOUT SETTLEMENT CONFIRMED</div><div class="receipt-head"><div><h2>${headline}</h2><p>The 48-hour requester judging window expired. The contract released funds without choosing a creative winner.</p></div><div class="receipt-chain"><span>MONAD TESTNET</span>${transactionReceiptMarkup(txHash)}</div></div><div class="timeout-receipt-grid"><div><span>VALID CREATORS</span><strong>${validCount}</strong><small>${creatorValue}</small></div><div><span>REQUESTER REFUND</span><strong>${requesterRefund.toFixed(2)}</strong><small>AUSD</small></div><div><span>KOTAE PROTOCOL</span><strong>${platform.toFixed(2)}</strong><small>AUSD</small></div><div class="timeout-total"><span>TOTAL SETTLED</span><strong>${totalSettled.toFixed(2)}</strong><small>AUSD</small></div></div><div class="timeout-boundary receipt-boundary"><strong>No winner was selected.</strong><span>No exclusive original or commercial rights were transferred. All creator bonds were returned.</span></div><button class="primary-button wide" id="timeoutDashboard">Continue to dashboard <span>→</span></button><small class="modal-note">Finalized Monad transactions link directly to the Testnet explorer.</small>`);
   receipt.querySelector(".modal").classList.add("receipt-modal");
   receipt.querySelector("#timeoutDashboard").onclick = () => { receipt.remove(); renderContests(); navigate("dashboard"); notify(`Timeout settled · ${totalSettled.toFixed(2)} AUSD released.`); };
 }
@@ -553,17 +579,20 @@ function settleContest(contest, entry, submissionId, chainSubmissionId) {
   const modal = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">SETTLEMENT PREVIEW</div><h2>Select Entry ${String(entry).padStart(2,"0")}?</h2><p>This decision transfers the selected original and its commercial rights. It cannot be reversed after the transaction confirms.</p><div class="settlement-table"><div><span>Winner receives</span><strong>${winnerTotal.toFixed(2)} AUSD</strong></div><div><span>Valid runners-up share</span><strong>${participation.toFixed(2)} AUSD</strong></div><div><span>KOTAE protocol</span><strong>${platform.toFixed(2)} AUSD</strong></div></div><button class="primary-button wide" id="confirmWinner">Confirm winner on Monad <span>↗</span></button>`);
   modal.querySelector("#confirmWinner").onclick = async () => {
     const button = modal.querySelector("#confirmWinner"); button.disabled=true; button.textContent="Confirming settlement…";
+    let confirmedTxHash = "demo:settlement";
     try {
       if (state.authMode === "signature") {
         if (!submissionId || !chainSubmissionId) throw new Error("The selected submission is not linked to an onchain entry.");
         const txHash = await callEscrow("chooseWinner", [chainContestId(contest), BigInt(chainSubmissionId)]);
+        confirmedTxHash = txHash;
         const response = await fetch(`/api/contests/${encodeURIComponent(contest.id)}/settle`, {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({submissionId,txHash})});
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "Winner settlement could not be recorded.");
+        confirmedTxHash = result.txHash || txHash;
       } else {
         await new Promise(resolve=>setTimeout(resolve,900));
       }
-      contest.status="SETTLED"; contest.winnerEntry=Number(entry); modal.remove(); showSettlementReceipt(contest, entry, winnerTotal, participation, platform, totalSettled);
+      contest.status="SETTLED"; contest.winnerEntry=Number(entry); modal.remove(); showSettlementReceipt(contest, entry, winnerTotal, participation, platform, totalSettled, confirmedTxHash);
     } catch (error) {
       button.disabled=false; button.innerHTML='Confirm winner on Monad <span>↗</span>';
       notify(error.message || "Winner settlement could not be completed.");
@@ -571,9 +600,9 @@ function settleContest(contest, entry, submissionId, chainSubmissionId) {
   };
 }
 
-function showSettlementReceipt(contest, entry, winnerTotal, participation, platform, totalSettled) {
+function showSettlementReceipt(contest, entry, winnerTotal, participation, platform, totalSettled, txHash) {
   const previewClass = contest.demoTheme === "strawberry" ? ` strawberry-preview strawberry-preview-${entry}` : "";
-  const receipt = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker receipt-kicker"><i></i> SETTLEMENT CONFIRMED</div><div class="receipt-head"><div><h2>Outcome unlocked.</h2><p>The requester selected Entry ${String(entry).padStart(2,"0")}. The original and its commercial rights are now available.</p></div><div class="receipt-chain"><span>MONAD TESTNET</span><strong>0x9c1e…7a2f</strong><small>Demo transaction</small></div></div><div class="delivery-grid"><div class="delivery-preview${previewClass}" role="img" aria-label="Unlocked winning submission"></div><div class="delivery-status"><span>DELIVERED ORIGINAL</span><strong>Entry ${String(entry).padStart(2,"0")}</strong><ul><li>Watermark removed</li><li>Commercial rights transferred</li><li>${contest.validCount} creator bonds returned</li></ul></div></div><div class="settlement-table receipt-table"><div><span>Winner paid</span><strong>${winnerTotal.toFixed(2)} AUSD</strong></div><div><span>Valid runners-up share</span><strong>${participation.toFixed(2)} AUSD</strong></div><div><span>KOTAE protocol</span><strong>${platform.toFixed(2)} AUSD</strong></div><div class="receipt-total"><span>Total settled</span><strong>${totalSettled.toFixed(2)} AUSD</strong></div></div><button class="primary-button wide" id="receiptDashboard">Continue to dashboard <span>→</span></button><small class="modal-note">In production, the transaction hash links to Monad Explorer and the original is delivered from private storage.</small>`);
+  const receipt = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker receipt-kicker"><i></i> SETTLEMENT CONFIRMED</div><div class="receipt-head"><div><h2>Outcome unlocked.</h2><p>The requester selected Entry ${String(entry).padStart(2,"0")}. The original and its commercial rights are now available.</p></div><div class="receipt-chain"><span>MONAD TESTNET</span>${transactionReceiptMarkup(txHash)}</div></div><div class="delivery-grid"><div class="delivery-preview${previewClass}" role="img" aria-label="Unlocked winning submission"></div><div class="delivery-status"><span>DELIVERED ORIGINAL</span><strong>Entry ${String(entry).padStart(2,"0")}</strong><ul><li>Watermark removed</li><li>Commercial rights transferred</li><li>${contest.validCount} creator bonds returned</li></ul></div></div><div class="settlement-table receipt-table"><div><span>Winner paid</span><strong>${winnerTotal.toFixed(2)} AUSD</strong></div><div><span>Valid runners-up share</span><strong>${participation.toFixed(2)} AUSD</strong></div><div><span>KOTAE protocol</span><strong>${platform.toFixed(2)} AUSD</strong></div><div class="receipt-total"><span>Total settled</span><strong>${totalSettled.toFixed(2)} AUSD</strong></div></div><button class="primary-button wide" id="receiptDashboard">Continue to dashboard <span>→</span></button><small class="modal-note">Finalized Monad transactions link directly to the Testnet explorer; the original is delivered from private storage.</small>`);
   receipt.querySelector(".modal").classList.add("receipt-modal");
   receipt.querySelector("#receiptDashboard").onclick = () => { receipt.remove(); renderContests(); navigate("dashboard"); notify(`Entry ${entry} unlocked · ${winnerTotal.toFixed(2)} AUSD paid to the winner.`); };
 }
