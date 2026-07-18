@@ -4,7 +4,7 @@ Add-Type -AssemblyName System.Speech
 
 $outputPath = Join-Path $PSScriptRoot '..\public\kotae-demo-voice.wav'
 $narration = @'
-I often need one small finished asset, not hours of prompting or an open-ended freelancer process. Paying before I can judge the result puts all the quality risk on me. KOTAE lets me fund the outcome instead.
+Some people know the result they need, but cannot get A I to produce it. Others can create great A I assisted work, but have no brief or buyer. KOTAE matches them around one funded outcome, so requesters pay for the answer, not the attempts.
 
 KOTAE is an onchain competition marketplace for finished AI-assisted work. A requester locks one A U S D budget on Monad Testnet. Creators submit completed outcomes with a refundable bond, and the requester chooses the result they actually want.
 

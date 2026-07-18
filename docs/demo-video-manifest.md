@@ -4,13 +4,13 @@
 
 - File: `public/kotae-demo.mp4`
 - Container: MP4
-- Video: H.264 Main Profile, 640x360, 30 fps
+- Video: H.264 Main Profile, 640x360, 25 fps
 - Audio: AAC, generated locally from the approved English narration
-- Duration: 1 minute 32.34 seconds
-- File size: 1,408,853 bytes
-- SHA-256: `035E13626743572ECE2731DC81128E3D2D350BE428BF49FE23D959B0FB62CC6C`
+- Duration: 1 minute 35.05 seconds
+- File size: 1,218,278 bytes
+- SHA-256: `40B24E64CA6F9FC7E9D7577ED6BF489A94D1E8B6CAA370D5A87090E07A182AB2`
 - Maximum length: 3 minutes
-- Public URL: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4
+- Public URL: https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4?v=14
 
 ## Exact facts shown
 

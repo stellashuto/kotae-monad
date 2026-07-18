@@ -27,7 +27,7 @@ Testnet
 `0x7A8806bfB0292D71081445C48595fDc45Dac46cC`
 
 **Demo video**
-https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4
+https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4?v=14
 
 ## Add before submitting
 

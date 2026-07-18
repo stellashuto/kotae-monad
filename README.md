@@ -5,7 +5,7 @@
 KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on Monad Testnet. A requester locks one budget, creators submit completed outcomes, and an independent Oracle records objective file eligibility before the requester chooses the winner.
 
 - **Live app:** https://outcome-ausd-spark.shuto-kajita.chatgpt.site
-- **Demo video:** https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4
+- **Demo video:** https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4?v=14
 - **Public repository:** https://github.com/stellashuto/kotae-monad
 - **Network:** Monad Testnet (`10143`)
 - **Contract:** [`0x7A8806bfB0292D71081445C48595fDc45Dac46cC`](https://testnet.monadvision.com/address/0x7A8806bfB0292D71081445C48595fDc45Dac46cC)

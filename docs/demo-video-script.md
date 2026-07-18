@@ -2,11 +2,11 @@
 
 Target length: **about 90 seconds**. The rendered video is hosted publicly at:
 
-https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4
+https://outcome-ausd-spark.shuto-kajita.chatgpt.site/kotae-demo.mp4?v=14
 
 ## 0:00-0:14 - The problem
 
-> I often need one small finished asset, not hours of prompting or an open-ended freelancer process. Paying before I can judge the result puts all the quality risk on me. KOTAE lets me fund the outcome instead.
+> Some people know the result they need, but cannot get AI to produce it. Others can create great AI-assisted work, but have no brief or buyer. KOTAE matches them around one funded outcome, so requesters pay for the answer, not the attempts.
 
 ## 0:14-0:32 - The mechanism
 
