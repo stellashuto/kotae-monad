@@ -13,6 +13,7 @@ export const schemaStatements = [
     status TEXT NOT NULL DEFAULT 'OPEN',
     tx_hash TEXT,
     chain_contest_id TEXT UNIQUE,
+    escrow_address TEXT,
     winner_submission_id TEXT,
     created_at TEXT NOT NULL
   )`,

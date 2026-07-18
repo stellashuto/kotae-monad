@@ -4,8 +4,8 @@
   "ausdAddress": "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC",
   "ausdFaucetAddress": "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C",
   "platformRecipient": "0xE185cFb28854C66A2Fe7972608B3353cebDd8760",
-  "eligibilityOracle": "0xE185cFb28854C66A2Fe7972608B3353cebDd8760",
-  "escrowAddress": "0xa85De5e792A04B8449D1616415114aAF8eD7Ab54",
-  "deploymentTxHash": "0xf3af3ece9f1fa15961becc0ae66de6aa4581fd78f12160caebfca8da15089f35",
-  "deploymentBlock": 45700059
+  "eligibilityOracle": "0x04f2aBCdE67e5162d1C811d8ac66216c99E34e87",
+  "escrowAddress": "0x7a8806bfb0292d71081445c48595fdc45dac46cc",
+  "deploymentTxHash": "0xbc92fab301a66cdca19d87e12b3b75f2d0691963a88aaeced59d51484daf449c",
+  "deploymentBlock": 45890401
 }

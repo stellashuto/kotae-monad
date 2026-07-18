@@ -6,7 +6,6 @@ const AUSD_FAUCET_ABI = parseAbi(["function requestFunds(address recipient)"]);
 const ESCROW_ABI = parseAbi([
   "function createContest(uint8 assetType, uint128 baseBudget, uint40 submissionDeadline, uint16 validCap, bytes32 briefHash) returns (uint256 contestId)",
   "function submitWork(uint256 contestId, bytes32 contentHash) returns (uint256 submissionId)",
-  "function recordEligibility(uint256 submissionId, uint8 eligibility, bytes32 reasonHash)",
   "function cancelBeforeFirstSubmission(uint256 contestId)",
   "function addSlotPack(uint256 contestId)",
   "function chooseWinner(uint256 contestId, uint256 winnerSubmissionId)",
@@ -177,19 +176,12 @@ document.querySelectorAll("[data-route]").forEach(link => link.addEventListener(
   event.preventDefault(); navigate(link.dataset.route);
 }));
 
-function eligibilityReasonHashPayload(payload) {
-  return keccak256(stringToHex(JSON.stringify({
-    reasonCodes: Array.isArray(payload.reasonCodes) ? payload.reasonCodes.map(String) : [],
-    message: payload.message ? String(payload.message) : null,
-  })));
-}
-
-function entryCard(number, status = "VALID", theme = "", canSelect = true, record = {}, canReview = false) {
+function entryCard(number, status = "VALID", theme = "", canSelect = true, record = {}) {
   const creator = record.creator ? `${record.creator.slice(0,6)}…${record.creator.slice(-4)}` : `Creator ${number}`;
   const chainSubmission = record.chainSubmissionId ? `#${record.chainSubmissionId}` : "Pending onchain ID";
   const privateFile = record.id ? `<a class="private-file-link" href="/api/submissions/${encodeURIComponent(record.id)}/file" target="_blank" rel="noreferrer">Open private finished work ↗</a>` : "";
-  const reviewAction = canReview && status === "CHECKING" ? `<button class="review-eligibility" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}">Review objective eligibility</button>` : "";
-  return `<article class="entry-card"><div class="entry-proof"><span>ONCHAIN ENTRY</span><strong>${escapeHtml(chainSubmission)}</strong><small>${escapeHtml(creator)}</small></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(creator)}</strong><span>Original stored privately · Access is wallet-gated</span></p>${privateFile}${reviewAction}<button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${canSelect ? "Select this outcome" : "Judging window expired"}</button></article>`;
+  const objectiveNote = status === "CHECKING" ? `<small class="oracle-status">Independent Oracle is finalizing objective file checks.</small>` : "";
+  return `<article class="entry-card"><div class="entry-proof"><span>ONCHAIN ENTRY</span><strong>${escapeHtml(chainSubmission)}</strong><small>${escapeHtml(creator)}</small></div><header><span>ENTRY ${String(number).padStart(2,"0")}</span><span class="${status === "VALID" ? "valid-badge" : "checking-badge"}">${status}</span></header><p><strong>${escapeHtml(creator)}</strong><span>Original stored privately · Access is wallet-gated</span></p>${privateFile}${objectiveNote}<button class="select-winner" data-entry="${number}" data-submission="${escapeHtml(record.id || "")}" data-chain-submission="${escapeHtml(record.chainSubmissionId || "")}" ${status !== "VALID" || !canSelect ? "disabled" : ""}>${canSelect ? "Select this outcome" : "Judging window expired"}</button></article>`;
 }
 
 async function openContest(id) {
@@ -219,8 +211,7 @@ async function openContest(id) {
   const isOpen = contest.status === "OPEN";
   const timeoutReady = contest.status === "JUDGING_EXPIRED";
   const entryRecords = Array.isArray(contest.entries) ? contest.entries : [];
-  const isOracle = Boolean(state.wallet && state.chain.eligibilityOracle && state.wallet.toLowerCase() === state.chain.eligibilityOracle.toLowerCase());
-  const entries = entryRecords.map((entry,i) => entryCard(i+1, entry.eligibility, "", isOpen && (state.authMode === "demo" || Boolean(entry.id && entry.chainSubmissionId)), entry, isOracle)).join("") || `<p>No finished work has been recorded yet.</p>`;
+  const entries = entryRecords.map((entry,i) => entryCard(i+1, entry.eligibility, "", isOpen && (state.authMode === "demo" || Boolean(entry.id && entry.chainSubmissionId)), entry)).join("") || `<p>No finished work has been recorded yet.</p>`;
   const cancelAction = contest.status === "OPEN" && contest.submissions === 0 ? `<button class="cancel-contest" id="cancelContest">Cancel & refund before first submission</button>` : "";
   const creatorVersion = state.creatorVersions[contest.id] || 0;
   const submitLabel = creatorVersion === 0 ? "Submit finished work ↗" : creatorVersion < 3 ? `Replace your submission · ${3 - creatorVersion} left` : "Replacement limit reached";
@@ -240,7 +231,6 @@ async function openContest(id) {
   document.querySelector("#settleTimeout")?.addEventListener("click", () => requestTimeoutSettlement(contest));
   document.querySelector("#addSlotPack")?.addEventListener("click", () => requestSlotPack(contest));
   document.querySelector("#cancelContest")?.addEventListener("click", () => requestContestCancellation(contest));
-  document.querySelectorAll(".review-eligibility").forEach(button => button.onclick = () => reviewEligibilityOnchain(contest, button.dataset.submission, button.dataset.chainSubmission));
   document.querySelectorAll(".select-winner").forEach(button => button.onclick = () => settleContest(contest, button.dataset.entry, button.dataset.submission, button.dataset.chainSubmission));
   navigate("contest");
 }
@@ -292,38 +282,12 @@ async function reviewSubmission(file, contest, hash) {
   return { valid:checks.every(check => check.pass), checks, hash, reasonCodes:checks.filter(check => !check.pass).map(check => check.label.toUpperCase().replaceAll(" ","_")) };
 }
 
-function showEligibilityReport(contest, file, review, version, replacing) {
-  const status = review.valid ? "CHECKING" : "NEEDS FIX";
+function showEligibilityReport(contest, file, review, version, replacing, recordedEligibility = "CHECKING") {
+  const status = review.valid ? recordedEligibility : "NEEDS FIX";
   const rows = review.checks.map(check => `<li class="${check.pass ? "pass" : "fail"}"><i>${check.pass ? "✓" : "!"}</i><div><strong>${escapeHtml(check.label)}</strong><span>${escapeHtml(check.detail)}</span></div><em>${check.source}</em></li>`).join("");
-  const report = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">OBJECTIVE PREFLIGHT · VERSION ${version}</div><div class="eligibility-result ${review.valid ? "valid" : "needs-fix"}"><span>${status}</span><strong>${review.valid ? "Uploaded onchain · awaiting oracle review" : "Fix the flagged file checks"}</strong><p>${review.valid ? "The format, size, integrity, duplicate hash, and creator attestation passed. Brief compliance is not auto-approved." : "No valid-entry slot was consumed."}</p></div><ul class="eligibility-checks">${rows}</ul><div class="eligibility-boundary"><strong>Preflight checks mechanics—not taste.</strong><span>The eligibility oracle records brief compliance onchain; the requester separately chooses the winner.</span></div><button class="primary-button wide" id="eligibilityContinue">${review.valid ? "Return to onchain entries" : replacing ? "Choose another replacement" : "Return to submission"} <span>→</span></button><small class="modal-note">SHA-256 ${review.hash.slice(0,16)}… · ${escapeHtml(file.name)}</small>`);
+  const report = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">OBJECTIVE PREFLIGHT · VERSION ${version}</div><div class="eligibility-result ${review.valid ? "valid" : "needs-fix"}"><span>${status}</span><strong>${review.valid ? status === "VALID" ? "Independent Oracle recorded objective eligibility" : "Uploaded onchain · Oracle finalizing" : "Fix the flagged file checks"}</strong><p>${review.valid ? "The format, size, integrity, content hash, and creator attestation passed. Creative brief quality remains the requester's winner decision." : "No valid-entry slot was consumed."}</p></div><ul class="eligibility-checks">${rows}</ul><div class="eligibility-boundary"><strong>Independent Oracle checks mechanics—not taste.</strong><span>The Requester cannot mark entries valid or invalid; the Requester only chooses the winner from valid outcomes.</span></div><button class="primary-button wide" id="eligibilityContinue">${review.valid ? "Return to onchain entries" : replacing ? "Choose another replacement" : "Return to submission"} <span>→</span></button><small class="modal-note">SHA-256 ${review.hash.slice(0,16)}… · ${escapeHtml(file.name)}</small>`);
   report.querySelector(".modal").classList.add("eligibility-modal");
   report.querySelector("#eligibilityContinue").onclick = () => { report.remove(); openContest(contest.id); };
-}
-
-function reviewEligibilityOnchain(contest, submissionId, chainSubmissionId) {
-  const modal = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">ONCHAIN ELIGIBILITY ORACLE</div><h2>Record objective brief compliance</h2><p>Open the wallet-gated original first. Confirm only the published must/avoid rules, file integrity, and ownership attestation. Creative preference belongs in winner selection—not here.</p><div class="eligibility-boundary"><strong>Submission #${escapeHtml(chainSubmissionId)}</strong><span>This decision is written to Monad Testnet and cannot be faked by a local toast.</span></div><label class="field"><span>Reason note</span><textarea id="eligibilityMessage" rows="3" maxlength="240">Objective file checks and published brief constraints reviewed.</textarea></label><div class="oracle-actions"><button class="primary-button" id="markEligible">Mark eligible</button><button class="danger-button" id="markNeedsFix">Needs fix</button></div>`);
-  const record = async (status) => {
-    const reasonCodes = status === "VALID" ? [] : ["BRIEF_CONSTRAINT_MISMATCH"];
-    const message = modal.querySelector("#eligibilityMessage").value.trim() || null;
-    const payload = { status, reasonCodes, message };
-    const active = status === "VALID" ? modal.querySelector("#markEligible") : modal.querySelector("#markNeedsFix");
-    active.disabled = true; active.textContent = "Recording on Monad…";
-    try {
-      const txHash = await callEscrow("recordEligibility", [BigInt(chainSubmissionId), status === "VALID" ? 1 : 2, eligibilityReasonHashPayload(payload)]);
-      const response = await fetch(`/api/submissions/${encodeURIComponent(submissionId)}/eligibility`, { method:"PATCH", headers:{"content-type":"application/json","x-wallet-address":state.wallet}, body:JSON.stringify({...payload,txHash}) });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Eligibility could not be recorded.");
-      const entry = contest.entries?.find(item => item.id === submissionId);
-      if (entry) entry.eligibility = status;
-      contest.validCount = contest.entries?.filter(item => item.eligibility === "VALID").length || 0;
-      modal.remove(); openContest(contest.id); notify(`Eligibility recorded onchain · ${status}.`);
-    } catch (error) {
-      active.disabled = false; active.textContent = status === "VALID" ? "Mark eligible" : "Needs fix";
-      notify(error.message || "Eligibility could not be recorded.");
-    }
-  };
-  modal.querySelector("#markEligible").onclick = () => record("VALID");
-  modal.querySelector("#markNeedsFix").onclick = () => record("NEEDS_FIX");
 }
 
 function showSubmitDialog() {
@@ -336,7 +300,7 @@ function showSubmitDialog() {
   const nextVersion = currentVersion + 1;
   const replacementsAfterUpload = Math.max(0, 3 - nextVersion);
   const actionLabel = replacing ? "Replace work & rerun eligibility" : "Deposit bond & run eligibility check";
-  const modal = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">CREATOR SUBMISSION · VERSION ${nextVersion}</div><h2>${replacing ? "Replace your submission" : "Submit finished work"}</h2><p>${escapeHtml(requirements)}</p><label class="drop-zone"><input type="file" id="entryFile" required /><b>${replacing ? "Choose the corrected original" : "Choose your finished original"}</b><span>The original is stored privately. The requester can inspect it for eligibility and selection; commercial rights transfer only after settlement.</span></label><div class="bond-row"><span>Refundable submission bond</span><strong>${replacing ? "Already secured" : `${bonds[contest.type]} AUSD`}</strong></div><label class="check-row"><input id="ownershipCheck" type="checkbox" /><span>I created or control the rights to this work and it follows the brief.</span></label><button class="primary-button wide" id="runCheck">${actionLabel} <span>↗</span></button><small class="modal-note">${replacementsAfterUpload} replacement${replacementsAfterUpload === 1 ? "" : "s"} will remain after this upload. Deterministic preflight checks file mechanics; the onchain oracle records brief compliance.</small>`);
+  const modal = modalShell(`<button class="modal-close" data-close>×</button><div class="section-kicker">CREATOR SUBMISSION · VERSION ${nextVersion}</div><h2>${replacing ? "Replace your submission" : "Submit finished work"}</h2><p>${escapeHtml(requirements)}</p><label class="drop-zone"><input type="file" id="entryFile" required /><b>${replacing ? "Choose the corrected original" : "Choose your finished original"}</b><span>The original is stored privately. The requester can inspect it only for winner selection; commercial rights transfer only after settlement.</span></label><div class="bond-row"><span>Refundable submission bond</span><strong>${replacing ? "Already secured" : `${bonds[contest.type]} AUSD`}</strong></div><label class="check-row"><input id="ownershipCheck" type="checkbox" /><span>I created or control the rights to this work and it follows the brief.</span></label><button class="primary-button wide" id="runCheck">${actionLabel} <span>↗</span></button><small class="modal-note">${replacementsAfterUpload} replacement${replacementsAfterUpload === 1 ? "" : "s"} will remain after this upload. An independent server Oracle records objective file checks onchain; the requester never controls eligibility.</small>`);
   modal.querySelector("#runCheck").onclick = async () => {
     const file = modal.querySelector("#entryFile").files[0];
     if (!file || !modal.querySelector("#ownershipCheck").checked) return notify("Add a file and confirm ownership first.");
@@ -377,10 +341,10 @@ function showSubmitDialog() {
     button.textContent = "Confirming objective preflight…";
     state.creatorVersions[contest.id] = recordedVersion;
     state.submissionHashes[contest.id] = [...(state.submissionHashes[contest.id] || []), hash];
-    state.creatorEligibility[contest.id] = "CHECKING";
+    state.creatorEligibility[contest.id] = recordedSubmission?.eligibility || "CHECKING";
     if (!replacing) contest.submissions += 1;
     if (recordedSubmission) contest.entries = null;
-    modal.remove(); showEligibilityReport(contest, file, review, recordedVersion, replacing);
+    modal.remove(); showEligibilityReport(contest, file, review, recordedVersion, replacing, recordedSubmission?.eligibility || "CHECKING");
   };
 }
 

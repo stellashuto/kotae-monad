@@ -14,6 +14,7 @@
     "contract:compile": "hardhat compile",
     "contract:test": "hardhat run scripts/test-contract.mjs",
     "contract:deploy:testnet": "hardhat run scripts/deploy-kotae.mjs --network monadTestnet",
+    "contract:deploy:separated": "node scripts/deploy-separated-escrow.mjs",
     "readiness:testnet": "node scripts/check-testnet-readiness.mjs"
   },
   "dependencies": {

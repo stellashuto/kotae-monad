@@ -10,17 +10,27 @@ import {
   assetTypeCode,
   ChainVerificationError,
   contestBriefHash,
-  eligibilityReasonHash,
   verifyEscrowTransaction,
 } from "./chain.js";
+import { recordObjectiveEligibility } from "./oracle.js";
 
 const embeddedStaticAssets = globalThis.__KOTAE_STATIC_ASSETS__;
-const CURRENT_SITE_VERSION = "7";
+const CURRENT_SITE_VERSION = "8";
 const initializedBindings = new WeakSet();
 async function db(env) {
   if (!env.DB) throw new Error("D1 binding DB is required");
   if (!initializedBindings.has(env.DB)) {
     await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
+    try { await env.DB.prepare(`ALTER TABLE contests ADD COLUMN escrow_address TEXT`).run(); } catch { /* Existing or fresh schema already has the column. */ }
+    const currentEscrow = String(env.KOTAE_ESCROW_ADDRESS || "").toLowerCase();
+    const legacyEscrow = String(env.LEGACY_KOTAE_ESCROW_ADDRESS || "").toLowerCase();
+    if (legacyEscrow && currentEscrow && legacyEscrow !== currentEscrow) {
+      await env.DB.batch([
+        env.DB.prepare(`UPDATE contests SET escrow_address=? WHERE escrow_address IS NULL`).bind(legacyEscrow),
+        env.DB.prepare(`UPDATE submissions SET chain_submission_id='legacy:' || chain_submission_id WHERE contest_id IN (SELECT id FROM contests WHERE lower(escrow_address)=?) AND chain_submission_id IS NOT NULL AND chain_submission_id NOT LIKE 'legacy:%'`).bind(legacyEscrow),
+        env.DB.prepare(`UPDATE contests SET chain_contest_id='legacy:' || chain_contest_id WHERE lower(escrow_address)=? AND chain_contest_id IS NOT NULL AND chain_contest_id NOT LIKE 'legacy:%'`).bind(legacyEscrow),
+      ]);
+    }
     initializedBindings.add(env.DB);
   }
   return env.DB;
@@ -84,7 +94,8 @@ async function walletForWrite(request, env, database) {
 
 async function listContests(env) {
   const database = await db(env);
-  const rows = await database.prepare(`SELECT c.*, COUNT(CASE WHEN s.eligibility='VALID' THEN 1 END) valid_count, COUNT(s.id) submission_count FROM contests c LEFT JOIN submissions s ON s.contest_id=c.id GROUP BY c.id ORDER BY c.created_at DESC`).all();
+  const currentEscrow = String(env.KOTAE_ESCROW_ADDRESS || "").toLowerCase();
+  const rows = await database.prepare(`SELECT c.*, COUNT(CASE WHEN s.eligibility='VALID' THEN 1 END) valid_count, COUNT(s.id) submission_count FROM contests c LEFT JOIN submissions s ON s.contest_id=c.id WHERE lower(c.escrow_address)=? GROUP BY c.id ORDER BY c.created_at DESC`).bind(currentEscrow).all();
   const contests = rows.results.map((row) => ({
     id: row.id,
     chainContestId: row.chain_contest_id,
@@ -164,7 +175,7 @@ async function createContest(request, env) {
   ) return json({ error: "Onchain contest terms do not match the submitted brief" }, 422);
   const id = makeId("contest"), now = new Date().toISOString(), chainContestId = String(verified.args.contestId);
   await database.batch([
-    database.prepare(`INSERT INTO contests (id,requester,title,asset_type,brief,must_json,avoid_json,budget_micros,valid_cap,submission_deadline,status,tx_hash,chain_contest_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,requester,body.title,body.type,body.brief,JSON.stringify(body.must||[]),JSON.stringify(body.avoid||[]),budget,body.cap,deadlineAt,"OPEN",verified.txHash,chainContestId,now),
+    database.prepare(`INSERT INTO contests (id,requester,title,asset_type,brief,must_json,avoid_json,budget_micros,valid_cap,submission_deadline,status,tx_hash,chain_contest_id,escrow_address,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,requester,body.title,body.type,body.brief,JSON.stringify(body.must||[]),JSON.stringify(body.avoid||[]),budget,body.cap,deadlineAt,"OPEN",verified.txHash,chainContestId,String(env.KOTAE_ESCROW_ADDRESS || "").toLowerCase(),now),
     database.prepare(`INSERT INTO events (contest_id,actor,event_type,payload_json,created_at) VALUES (?,?,?,?,?)`).bind(id,requester,"CONTEST_FUNDED",JSON.stringify({budget,txHash:verified.txHash,chainContestId,briefHash:expectedBriefHash}),now),
     chainRecord(database,verified,requester,"CONTEST_CREATED",id,now),
   ]);
@@ -214,38 +225,20 @@ async function submitWork(request, env, contestId) {
     database.prepare(`INSERT INTO events (contest_id,actor,event_type,payload_json,created_at) VALUES (?,?,?,?,?)`).bind(contestId,creator,"SUBMISSION_UPLOADED",JSON.stringify({submissionId,chainSubmissionId,version,contentHash,txHash:verified.txHash}),now),
     chainRecord(database,verified,creator,"WORK_SUBMITTED",contestId,now),
   ]);
-  return json({ submissionId, chainSubmissionId, version, contentHash, txHash: verified.txHash, eligibility: "CHECKING", bondMicros: bond, bondRequired: !existing, replacementsRemaining: 3 - version }, 201);
-}
-
-async function eligibility(request, env, submissionId) {
-  const database = await db(env);
-  const oracle = await walletForWrite(request, env, database);
-  if (oracle instanceof Response) return oracle;
-  const configuredOracle = String(env.ELIGIBILITY_ORACLE || env.KOTAE_ELIGIBILITY_ORACLE || "").toLowerCase();
-  if (!/^0x[0-9a-f]{40}$/.test(configuredOracle)) return json({ error: "Eligibility oracle is not configured" }, 503);
-  if (oracle !== configuredOracle) return json({ error: "Only the configured eligibility oracle can record a decision" }, 403);
-  const body = await request.json().catch(() => ({})), status = body.status === "VALID" ? "VALID" : "NEEDS_FIX";
-  const submission = await database.prepare(`SELECT contest_id,chain_submission_id FROM submissions WHERE id=?`).bind(submissionId).first();
-  if (!submission?.chain_submission_id) return json({ error: "Submission not found" }, 404);
-  const contest = await database.prepare(`SELECT chain_contest_id FROM contests WHERE id=?`).bind(submission.contest_id).first();
-  const reused = await rejectReusedTransaction(database, body.txHash);
-  if (reused) return reused;
-  const verified = await verifiedChainTransaction(env, { txHash: String(body.txHash || ""), actor: oracle, eventName: "EligibilityRecorded" });
-  if (verified instanceof Response) return verified;
-  const expectedEligibility = status === "VALID" ? 1n : 2n;
-  const reasonHash = eligibilityReasonHash(body);
-  if (
-    asBigInt(verified.args.contestId) !== BigInt(contest.chain_contest_id) ||
-    asBigInt(verified.args.submissionId) !== BigInt(submission.chain_submission_id) ||
-    asBigInt(verified.args.eligibility) !== expectedEligibility ||
-    !sameHex(verified.args.reasonHash, reasonHash)
-  ) return json({ error: "Onchain eligibility result does not match the evaluator payload" }, 422);
-  const now = new Date().toISOString();
-  await database.batch([
-    database.prepare(`UPDATE submissions SET eligibility=?,reason_codes_json=?,ai_message=? WHERE id=?`).bind(status,JSON.stringify(body.reasonCodes||[]),body.message||null,submissionId),
-    chainRecord(database,verified,oracle,"ELIGIBILITY_RECORDED",submission.contest_id,now),
-  ]);
-  return json({ submissionId, eligibility: status, txHash: verified.txHash });
+  let objectiveEligibility = "CHECKING", oracleTxHash = null;
+  try {
+    const oracle = await recordObjectiveEligibility(env, chainSubmissionId);
+    await database.batch([
+      database.prepare(`UPDATE submissions SET eligibility='VALID',reason_codes_json=?,ai_message=? WHERE id=?`).bind(JSON.stringify(oracle.reasonCodes),oracle.message,submissionId),
+      database.prepare(`INSERT INTO chain_transactions (tx_hash,actor,action,contest_id,block_number,verified_at) VALUES (?,?,?,?,?,?)`).bind(oracle.txHash,oracle.actor,"ELIGIBILITY_RECORDED",contestId,oracle.blockNumber,new Date().toISOString()),
+      database.prepare(`INSERT INTO events (contest_id,actor,event_type,payload_json,created_at) VALUES (?,?,?,?,?)`).bind(contestId,oracle.actor,"OBJECTIVE_ELIGIBILITY_RECORDED",JSON.stringify({submissionId,chainSubmissionId,txHash:oracle.txHash}),new Date().toISOString()),
+    ]);
+    objectiveEligibility = "VALID";
+    oracleTxHash = oracle.txHash;
+  } catch (error) {
+    console.error("Independent Oracle finalization failed", error instanceof Error ? error.message : String(error));
+  }
+  return json({ submissionId, chainSubmissionId, version, contentHash, txHash: verified.txHash, oracleTxHash, eligibility: objectiveEligibility, bondMicros: bond, bondRequired: !existing, replacementsRemaining: 3 - version }, 201);
 }
 
 async function settle(request, env, contestId) {
@@ -369,7 +362,8 @@ export default { async fetch(request, env) {
     ausdAddress: env.AUSD_ADDRESS || null,
     ausdFaucetAddress: env.AUSD_FAUCET_ADDRESS || "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C",
     eligibilityOracle: env.ELIGIBILITY_ORACLE || env.KOTAE_ELIGIBILITY_ORACLE || null,
-    eligibilityOracleConfigured: /^0x[0-9a-fA-F]{40}$/.test(String(env.ELIGIBILITY_ORACLE || env.KOTAE_ELIGIBILITY_ORACLE || "")),
+    eligibilityOracleConfigured: /^0x[0-9a-fA-F]{40}$/.test(String(env.ELIGIBILITY_ORACLE || "")) && /^0x[0-9a-fA-F]{64}$/.test(String(env.ELIGIBILITY_ORACLE_PRIVATE_KEY || "")),
+    requesterOracleSeparated: Boolean(env.PLATFORM_RECIPIENT && env.ELIGIBILITY_ORACLE && String(env.PLATFORM_RECIPIENT).toLowerCase() !== String(env.ELIGIBILITY_ORACLE).toLowerCase()),
   });
   if (url.pathname === "/api/auth/challenge" && request.method === "POST") return createWalletChallenge(request,await db(env));
   if (url.pathname === "/api/auth/verify" && request.method === "POST") return verifyWalletChallenge(request,await db(env));
@@ -382,8 +376,6 @@ export default { async fetch(request, env) {
   if (match && request.method === "POST") return submitWork(request,env,match[1]);
   match = url.pathname.match(/^\/api\/submissions\/([^/]+)\/file$/);
   if (match && request.method === "GET") return privateSubmissionFile(request,env,match[1]);
-  match = url.pathname.match(/^\/api\/submissions\/([^/]+)\/eligibility$/);
-  if (match && request.method === "PATCH") return eligibility(request,env,match[1]);
   match = url.pathname.match(/^\/api\/contests\/([^/]+)\/settle$/);
   if (match && request.method === "POST") return settle(request,env,match[1]);
   match = url.pathname.match(/^\/api\/contests\/([^/]+)\/cancel$/);

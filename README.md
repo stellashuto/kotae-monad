@@ -2,12 +2,12 @@
 
 **Buy the answer. Not the attempts.**
 
-KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on Monad Testnet. A requester locks one budget, creators submit completed outcomes, deterministic preflight rejects broken files, and an onchain oracle records brief compliance before the requester chooses the winner.
+KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on Monad Testnet. A requester locks one budget, creators submit completed outcomes, and an independent Oracle records objective file eligibility before the requester chooses the winner.
 
 - **Live app:** https://outcome-ausd-spark.shuto-kajita.chatgpt.site
 - **Public repository:** https://github.com/stellashuto/kotae-monad
 - **Network:** Monad Testnet (`10143`)
-- **Contract:** [`0xa85De5e792A04B8449D1616415114aAF8eD7Ab54`](https://testnet.monadvision.com/address/0xa85De5e792A04B8449D1616415114aAF8eD7Ab54)
+- **Contract:** [`0x7A8806bfB0292D71081445C48595fDc45Dac46cC`](https://testnet.monadvision.com/address/0x7A8806bfB0292D71081445C48595fDc45Dac46cC)
 
 ## Spark submission summary
 
@@ -17,7 +17,7 @@ KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on
 
 **Problem:** When I need a small poster, landing page, short video, or micro-tool, I either pay one person before seeing the result or sort through speculative AI attempts. The buyer carries the quality risk, while serious creators compete with spam and unclear payment promises.
 
-**Solution:** KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Deterministic checks verify file integrity, format, size, and duplicate hashes; the configured oracle records objective brief compliance onchain. It cannot choose the winner. The requester keeps the creative decision, and the contract settles every AUSD according to fixed rules.
+**Solution:** KOTAE locks the requester's AUSD before work begins. Creators submit finished files with an onchain bond. Deterministic checks verify file integrity, format, size, content hash, and ownership attestation; a separately controlled Oracle records that objective result onchain. It cannot choose the winner. The requester evaluates the creative brief and keeps only the winner decision, while the contract settles every AUSD according to fixed rules.
 
 **Category:** Monad Testnet
 
@@ -46,8 +46,8 @@ KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on
 4. Confirm the AUSD approval and contest transaction in the wallet.
 5. See the contest appear from the live API with its onchain contest ID.
 6. From a creator wallet, submit a finished file and its bond.
-7. From the oracle wallet, open the private file and record objective eligibility onchain.
-8. From the requester wallet, choose the outcome after eligibility is recorded.
+7. The independent server Oracle automatically records objective file eligibility onchain.
+8. From the requester wallet, review valid outcomes and choose the winner.
 
 ## Architecture
 
@@ -62,7 +62,7 @@ KOTAE Worker --------> D1 (contests, sessions, verified tx hashes)
 KotaeEscrow on Monad Testnet <----> AUSD
 ```
 
-The eligibility oracle can record rule compliance but cannot select a winner or redirect funds. Creative choice remains with the requester.
+The eligibility Oracle can record objective file eligibility but cannot select a winner or redirect funds. The Requester cannot control eligibility; creative choice remains the Requester's separate winner decision.
 
 ## Run locally
 
@@ -89,11 +89,13 @@ npm run build
 
 ## Deployment
 
-- Escrow: `0xa85De5e792A04B8449D1616415114aAF8eD7Ab54`
-- Deployment transaction: `0xf3af3ece9f1fa15961becc0ae66de6aa4581fd78f12160caebfca8da15089f35`
+- Escrow: `0x7A8806bfB0292D71081445C48595fDc45Dac46cC`
+- Deployment transaction: `0xbc92fab301a66cdca19d87e12b3b75f2d0691963a88aaeced59d51484daf449c`
 - AUSD: `0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`
 - AUSD faucet: `0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`
-- Platform recipient and eligibility oracle: `0xE185cFb28854C66A2Fe7972608B3353cebDd8760`
+- Platform recipient: `0xE185cFb28854C66A2Fe7972608B3353cebDd8760`
+- Independent eligibility Oracle: `0x04f2aBCdE67e5162d1C811d8ac66216c99E34e87`
+- KotaeEscrow: `0x7a8806bfb0292d71081445c48595fdc45dac46cc`
 
 Never commit a funded private key. Hosted secrets are managed outside the repository.
 

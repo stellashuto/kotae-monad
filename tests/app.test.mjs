@@ -7,7 +7,7 @@ test("product copy and critical transaction affordances render", async () => {
   for (const phrase of ["KOTAE", "Buy the answer", "Not the attempts", "Explore live contests", "Short Video", "Fund & open contest", "Submit finished work", "Valid runners-up", "Monad Testnet"]) assert.match(html, new RegExp(phrase));
   assert.match(html, /<img[\s\S]*src="\/og\.png"[\s\S]*strawberry soda poster brief/);
   assert.match(html, /POST-HACKATHON ROADMAP/);
-  assert.match(html, /app\.js\?v=7/);
+  assert.match(html, /app\.js\?v=8/);
   assert.match(html, /Creators sell what/);
   assert.match(html, /fixed AUSD price/);
 });
@@ -20,7 +20,7 @@ test("production worker embeds the static site when an asset binding is unavaila
   assert.match(worker, /embeddedStaticResponse\(request\)/);
   assert.match(worker, /globalThis\.__KOTAE_STATIC_ASSETS__/);
   assert.match(worker, /"cache-control": "no-cache"/);
-  assert.match(worker, /CURRENT_SITE_VERSION = "7"/);
+  assert.match(worker, /CURRENT_SITE_VERSION = "8"/);
   assert.match(worker, /Response\.redirect/);
   assert.match(buildScript, /embeddedStaticAssets/);
   assert.match(buildScript, /"globalThis\.__KOTAE_STATIC_ASSETS__"/);
@@ -61,9 +61,10 @@ test("live marketplace avoids placeholder contests and exposes real outcome cont
   assert.doesNotMatch(app, /fallbackContests/);
   assert.doesNotMatch(app, /Demo wallet connected/);
   assert.match(app, /Open private finished work/);
-  assert.match(app, /recordEligibility/);
-  assert.match(app, /Review objective eligibility/);
-  assert.match(app, /awaiting oracle review/);
+  assert.doesNotMatch(app, /recordEligibility/);
+  assert.doesNotMatch(app, /Review objective eligibility/);
+  assert.match(app, /Independent Oracle recorded objective eligibility/);
+  assert.match(app, /Requester cannot mark entries valid or invalid/);
   assert.doesNotMatch(app, /source:"AI"/);
   assert.match(app, /Select this outcome/);
   assert.match(app, /Outcome unlocked/);
@@ -78,7 +79,7 @@ test("live marketplace avoids placeholder contests and exposes real outcome cont
   assert.match(app, /Added to participation pool/);
   assert.match(app, /slotFees/);
   assert.match(app, /SHA-256/);
-  assert.match(app, /Preflight checks mechanics—not taste/);
+  assert.match(app, /Independent Oracle checks mechanics—not taste/);
   assert.match(app, /NEEDS FIX/);
   assert.match(app, /MP4 or WebM/);
   assert.match(app, /Video duration/);
@@ -156,10 +157,12 @@ test("production writes require wallet sessions and finalized chain receipts", a
   assert.doesNotMatch(source, /demo:anonymous/);
 });
 
-test("demo wallets are validated and eligibility requires the configured oracle", async () => {
-  const [{ authenticatedWallet }, source] = await Promise.all([
+test("demo wallets are validated and objective eligibility uses a separated server Oracle", async () => {
+  const [{ authenticatedWallet }, source, oracle, config] = await Promise.all([
     import(new URL("../worker/auth.js", import.meta.url)),
-    readFile(new URL("../worker/index.js", import.meta.url), "utf8")
+    readFile(new URL("../worker/index.js", import.meta.url), "utf8"),
+    readFile(new URL("../worker/oracle.js", import.meta.url), "utf8"),
+    readFile(new URL("../config/monad-testnet.json", import.meta.url), "utf8").then(JSON.parse),
   ]);
   const invalidWallet = await authenticatedWallet(new Request("https://kotae.test/api/contests", {
     method: "POST",
@@ -168,7 +171,22 @@ test("demo wallets are validated and eligibility requires the configured oracle"
   }), { KOTAE_AUTH_MODE: "demo" }, {});
   assert.equal(invalidWallet.status, 401);
 
-  assert.match(source, /Eligibility oracle is not configured/);
-  assert.match(source, /Only the configured eligibility oracle can record a decision/);
-  assert.match(source, /actor: oracle, eventName: "EligibilityRecorded"/);
+  assert.match(source, /recordObjectiveEligibility/);
+  assert.match(source, /OBJECTIVE_ELIGIBILITY_RECORDED/);
+  assert.match(source, /requesterOracleSeparated/);
+  assert.match(oracle, /ELIGIBILITY_ORACLE_PRIVATE_KEY/);
+  assert.match(oracle, /recordEligibility/);
+  assert.notEqual(config.eligibilityOracle.toLowerCase(), config.platformRecipient.toLowerCase());
+});
+
+test("legacy contract rows are isolated from the active escrow namespace", async () => {
+  const [source, schema] = await Promise.all([
+    readFile(new URL("../worker/index.js", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(schema, /escrow_address TEXT/);
+  assert.match(source, /LEGACY_KOTAE_ESCROW_ADDRESS/);
+  assert.match(source, /chain_contest_id='legacy:' \|\| chain_contest_id/);
+  assert.match(source, /chain_submission_id='legacy:' \|\| chain_submission_id/);
+  assert.match(source, /WHERE lower\(c\.escrow_address\)=\?/);
 });
