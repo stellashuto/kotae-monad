@@ -1,0 +1,11 @@
+node_modules
+dist
+vercel-dist
+.site-package.tar.gz
+.openai
+.secrets
+public/demo-frames
+public/kotae-demo-voice.wav
+public/kotae-demo.webm
+scripts/demo-video.html
+scripts/demo-video-server.mjs
