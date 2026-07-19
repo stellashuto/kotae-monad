@@ -6,6 +6,7 @@ KOTAE is an AUSD-funded competition marketplace for finished AI-assisted work on
 
 - **Live app:** https://kotae-monad-spark.vercel.app
 - **Demo video:** https://kotae-monad-spark.vercel.app/kotae-demo-v18.mp4
+- **Social post:** https://x.com/ShizukuStella/status/2078646361575317539
 - **Public repository:** https://github.com/stellashuto/kotae-monad
 - **Network:** Monad Testnet (`10143`)
 - **Contract:** [`0x7A8806bfB0292D71081445C48595fDc45Dac46cC`](https://testnet.monadvision.com/address/0x7A8806bfB0292D71081445C48595fDc45Dac46cC)

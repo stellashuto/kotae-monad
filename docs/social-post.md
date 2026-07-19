@@ -1,5 +1,7 @@
 # Social post copy
 
+Published: https://x.com/ShizukuStella/status/2078646361575317539
+
 I built **KOTAE** for the @monad_xyz Spark hackathon.
 
 My problem: when I need one small poster, landing page, video, or micro-tool, I have to pay before seeing the result—or sort through AI prompt spam.

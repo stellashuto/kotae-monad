@@ -29,10 +29,8 @@ Testnet
 **Demo video**
 https://kotae-monad-spark.vercel.app/kotae-demo-v18.mp4
 
-## Add before submitting
-
 **Post URL**
-Publish the copy in `docs/social-post.md`, then paste the public post URL here. This is required only for consideration for the Most Viral Solution prize.
+https://x.com/ShizukuStella/status/2078646361575317539
 
 ## Entrant confirmation
 
